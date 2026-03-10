@@ -95,6 +95,17 @@ def obter_todos_deputados():
 # ==========================================================
 # FUNÇÕES DE BANCO
 # ==========================================================
+
+def salvar_deputado_basico(cursor, dep_id):
+    # Insere o deputado se ele não existir, para não dar erro de chave estrangeira
+    query = """
+        INSERT INTO deputados (deputado_id, nome, partido)
+        VALUES (%s, %s, %s)
+        ON CONFLICT (deputado_id) DO NOTHING;
+    """
+    # Como pegamos apenas o ID no início, salvamos valores genéricos que podem ser atualizados depois
+    cursor.execute(query, (dep_id, "Nome Indisponível", "S/P"))
+
 def obter_ultima_data(cursor, deputado_id):
     cursor.execute("SELECT MAX(data) FROM gastos WHERE deputado_id = %s", (deputado_id,))
     return cursor.fetchone()[0]
@@ -130,6 +141,13 @@ def coletar_deputado(deputado_id):
     pagina = 1
 
     try:
+        cursor.execute("""
+            INSERT INTO deputados (deputado_id, nome, partido)
+            VALUES (%s, %s, %s)
+            ON CONFLICT (deputado_id) DO NOTHING;
+        """, (deputado_id, "Carregando...", "S/P"))
+        conn.commit()
+        
         ultima_data = obter_ultima_data(cursor, deputado_id)
 
         while True:
@@ -144,7 +162,7 @@ def coletar_deputado(deputado_id):
                 break
 
             # filtrar apenas gastos novos
-            if ultima_data:
+            if ultima_data and dados: # Só filtra se 'ultima_data' existir (não for None)
                 dados = [item for item in dados if datetime.strptime(item.get("dataDocumento"), "%Y-%m-%d").date() > ultima_data]
                 if not dados:
                     break
@@ -203,3 +221,4 @@ if __name__ == "__main__":
     else:
 
         print("Agendamento diário está DESATIVADO. Apenas coleta inicial executada.")
+
