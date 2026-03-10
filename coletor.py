@@ -114,21 +114,29 @@ def salvar_gastos(cursor, deputado_id, dados):
     registros = []
     for item in dados:
         data_doc = item.get("dataDocumento")
-        if not data_doc: continue
+        if not data_doc: 
+            continue
+            
+        # Montamos a tupla na ordem das colunas do seu INSERT
         registros.append((
             deputado_id,
             data_doc,
             item.get("valorDocumento"),
-            item.get("tipoDespesa"),
-            item.get("codDocumento")
+            item.get("tipoDespesa"), # Isso vai para a coluna 'descricao'
+            item.get("codDocumento")  # Isso vai para a coluna 'cod_documento'
         ))
-    if not registros: return
+        
+    if not registros: 
+        return
+
+    # O SQL usa os nomes das colunas que você criou no Supabase
     query = """
         INSERT INTO gastos (deputado_id, data, valor, descricao, cod_documento)
-        VALUES (%s,%s,%s,%s,%s)
+        VALUES (%s, %s, %s, %s, %s)
         ON CONFLICT (cod_documento) DO NOTHING;
     """
     execute_batch(cursor, query, registros)
+
 
 # ==========================================================
 # COLETA DE DESPESAS DE UM DEPUTADO
@@ -221,4 +229,5 @@ if __name__ == "__main__":
     else:
 
         print("Agendamento diário está DESATIVADO. Apenas coleta inicial executada.")
+
 
