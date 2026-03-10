@@ -47,7 +47,6 @@ ATIVAR_AGENDAMENTO = False  # True = roda diariamente / False = não roda
 # LOGGING
 # ==========================================================
 logging.basicConfig(
-    filename="coletor.log",
     level=logging.INFO,
     format="%(asctime)s - %(levelname)s - %(message)s"
 )
@@ -229,8 +228,7 @@ if __name__ == "__main__":
     if ATIVAR_AGENDAMENTO:
         iniciar_agendamento(todos_deputados)
     else:
-
-        print("Agendamento diário está DESATIVADO. Apenas coleta inicial executada.")
+        print("Coleta finalizada. Script encerrado para o GitHub Actions.")
 
 
 
