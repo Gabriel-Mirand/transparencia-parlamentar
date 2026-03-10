@@ -31,7 +31,8 @@ DB_CONFIG = {
     "user": os.getenv("DB_USER"),
     "password": os.getenv("DB_PASSWORD"),
     "host": os.getenv("DB_HOST"),
-    "port": os.getenv("DB_PORT")
+    "port": os.getenv("DB_PORT"),
+    "sslmode": "require"
 }
 
 MAX_WORKERS = 5
@@ -200,4 +201,5 @@ if __name__ == "__main__":
     if ATIVAR_AGENDAMENTO:
         iniciar_agendamento(todos_deputados)
     else:
+
         print("Agendamento diário está DESATIVADO. Apenas coleta inicial executada.")
