@@ -170,10 +170,12 @@ def coletar_deputado(deputado_id):
                 break
 
             # filtrar apenas gastos novos
-            if ultima_data and dados: # Só filtra se 'ultima_data' existir (não for None)
+            if dados and ultima_data is not None:
+                # Só filtra se já houver dados no banco (ultima_data não é None)
                 dados = [item for item in dados if datetime.strptime(item.get("dataDocumento"), "%Y-%m-%d").date() > ultima_data]
-                if not dados:
-                    break
+            
+            if not dados:
+                break
 
             salvar_gastos(cursor, deputado_id, dados)
             conn.commit()
@@ -229,5 +231,6 @@ if __name__ == "__main__":
     else:
 
         print("Agendamento diário está DESATIVADO. Apenas coleta inicial executada.")
+
 
 
