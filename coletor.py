@@ -45,10 +45,11 @@ def criar_sessao():
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
         'Accept': 'application/json, text/plain, */*',
         'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
-        'Referer': 'https://dadosabertos.camara.leg.br' # Ajuda a validar a requisição
+        'Referer': 'https://dadosabertos.camara.leg.br/',
+        'Origin': 'https://dadosabertos.camara.leg.br'
     })
-    # Aumentamos o tempo de espera (backoff) para a API não achar que é um ataque
-    retry = Retry(total=5, backoff_factor=3, status_forcelist=[429, 500, 502, 503, 504])
+    # O Backoff maior ajuda a não ser banido por velocidade
+    retry = Retry(total=5, backoff_factor=3, status_forcelist=[403, 429, 500, 502, 503, 504])
     adapter = HTTPAdapter(max_retries=retry)
     session.mount("https://", adapter)
     return session
@@ -64,6 +65,8 @@ def obter_todos_deputados():
     while True:
         params = {"ordem": "ASC", "ordenarPor": "nome", "itens": 100, "pagina": pagina}
         resposta = session.get(API_DEPUTADOS, params=params, timeout=30)
+        
+        time.sleep(2)
         
         # Verifica se a resposta foi bem sucedida
         if resposta.status_code != 200:
@@ -181,6 +184,7 @@ if __name__ == "__main__":
     lista_deputados = obter_todos_deputados()
     coletar_varios(lista_deputados)
     print("Processo concluído com sucesso!")
+
 
 
 
