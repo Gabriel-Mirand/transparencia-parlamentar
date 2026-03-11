@@ -41,20 +41,21 @@ logging.basicConfig(
 
 def criar_sessao():
     session = requests.Session()
-    # Adiciona identificação para a API não bloquear a requisição
+    # Identificação essencial para evitar bloqueio da API
     session.headers.update({
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
         'Accept': 'application/json'
     })
     retry = Retry(
         total=5,
-        backoff_factor=1,
-        status_forcelist=[429, 500, 502, 503, 504], # Incluímos o erro 429 (muitas requisições)
+        backoff_factor=2, # Aumentei o tempo de espera entre tentativas
+        status_forcelist=[429, 500, 502, 503, 504],
         allowed_methods=["GET"]
     )
     adapter = HTTPAdapter(max_retries=retry)
     session.mount("https://", adapter)
     return session
+
 
 
 # ==========================================================
@@ -68,17 +69,34 @@ def obter_todos_deputados():
     while True:
         params = {"ordem": "ASC", "ordenarPor": "nome", "itens": 100, "pagina": pagina}
         resposta = session.get(API_DEPUTADOS, params=params, timeout=30)
-        if resposta.status_code != 200: break
-        dados = resposta.json().get("dados", [])
-        if not dados: break
-        for dep in dados:
-            deputados_completos.append({
-                "id": dep["id"],
-                "nome": dep["nome"],
-                "partido": dep.get("siglaPartido", "S/P"),
-                "uf": dep.get("siglaUf", "??")
-            })
-        pagina += 1
+        
+        # Verifica se a resposta foi bem sucedida
+        if resposta.status_code != 200:
+            logging.error(f"Erro na API: Status {resposta.status_code}")
+            break
+            
+        # Verifica se o conteúdo não está vazio
+        if not resposta.text.strip():
+            logging.error("API retornou corpo vazio")
+            break
+
+        try:
+            dados_json = resposta.json()
+            dados = dados_json.get("dados", [])
+            if not dados: break
+            
+            for dep in dados:
+                deputados_completos.append({
+                    "id": dep["id"],
+                    "nome": dep["nome"],
+                    "partido": dep.get("siglaPartido", "S/P"),
+                    "uf": dep.get("siglaUf", "??")
+                })
+            pagina += 1
+        except requests.exceptions.JSONDecodeError:
+            logging.error(f"Erro ao decodificar JSON na página {pagina}. Conteúdo: {resposta.text[:100]}")
+            break
+            
     logging.info(f"Total de deputados encontrados: {len(deputados_completos)}")
     return deputados_completos
 
@@ -168,6 +186,7 @@ if __name__ == "__main__":
     lista_deputados = obter_todos_deputados()
     coletar_varios(lista_deputados)
     print("Processo concluído com sucesso!")
+
 
 
 
