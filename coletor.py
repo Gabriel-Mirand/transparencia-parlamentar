@@ -31,7 +31,7 @@ DB_CONFIG = {
     "user": os.getenv("DB_USER"),
     "password": os.getenv("DB_PASSWORD"),
     "host": os.getenv("DB_HOST"),
-    "port": os.getenv("DB_PORT"),
+    "port": int(os.getenv("DB_PORT", 6543)),
     "sslmode": "require"
 }
 
@@ -229,6 +229,7 @@ if __name__ == "__main__":
         iniciar_agendamento(todos_deputados)
     else:
         print("Coleta finalizada. Script encerrado para o GitHub Actions.")
+
 
 
 
