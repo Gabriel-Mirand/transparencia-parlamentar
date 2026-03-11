@@ -12,6 +12,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import os
 from dotenv import load_dotenv
 
+# Carrega variáveis do .env (local) ou Secrets (GitHub)
 load_dotenv()
 
 # ==========================================================
@@ -25,13 +26,14 @@ DB_CONFIG = {
     "user": os.getenv("DB_USER"),
     "password": os.getenv("DB_PASSWORD"),
     "host": os.getenv("DB_HOST"),
-    "port": int(os.getenv("DB_PORT", 6543)),
+    "port": int(os.getenv("DB_PORT", 6543)), # Conexão via Pooler
     "sslmode": "require"
 }
 
 MAX_WORKERS = 5
 ATIVAR_AGENDAMENTO = False 
 
+# Logging configurado para aparecer no console do GitHub Actions
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(levelname)s - %(message)s"
@@ -39,17 +41,23 @@ logging.basicConfig(
 
 def criar_sessao():
     session = requests.Session()
-    retry = Retry(total=5, backoff_factor=1, status_forcelist=[500,502,503,504], allowed_methods=["GET"])
+    retry = Retry(
+        total=5,
+        backoff_factor=1,
+        status_forcelist=[500, 502, 503, 504],
+        allowed_methods=["GET"]
+    )
     adapter = HTTPAdapter(max_retries=retry)
     session.mount("https://", adapter)
     return session
 
 # ==========================================================
-# FUNÇÕES DE BANCO
+# FUNÇÕES DE BANCO E COLETA
 # ==========================================================
+
 def obter_todos_deputados():
     session = criar_sessao()
-    deputados_ids = []
+    deputados_completos = []
     pagina = 1
     while True:
         params = {"ordem": "ASC", "ordenarPor": "nome", "itens": 100, "pagina": pagina}
@@ -57,14 +65,21 @@ def obter_todos_deputados():
         if resposta.status_code != 200: break
         dados = resposta.json().get("dados", [])
         if not dados: break
-        deputados_ids.extend([dep["id"] for dep in dados])
+        for dep in dados:
+            deputados_completos.append({
+                "id": dep["id"],
+                "nome": dep["nome"],
+                "partido": dep.get("siglaPartido", "S/P"),
+                "uf": dep.get("siglaUf", "??")
+            })
         pagina += 1
-    return deputados_ids
+    logging.info(f"Total de deputados encontrados: {len(deputados_completos)}")
+    return deputados_completos
 
 def obter_ultima_data(cursor, deputado_id):
     cursor.execute("SELECT MAX(data) FROM gastos WHERE deputado_id = %s", (deputado_id,))
     res = cursor.fetchone()
-    return res[0] if res else None
+    return res[0] if res and res[0] else None
 
 def salvar_gastos(cursor, deputado_id, dados):
     registros = []
@@ -76,7 +91,7 @@ def salvar_gastos(cursor, deputado_id, dados):
             data_doc, 
             item.get("valorDocumento"), 
             item.get("tipoDespesa"), 
-            str(item.get("codDocumento")) # Convertido para string para evitar erro alfanumérico
+            str(item.get("codDocumento")) # Garante que códigos alfanuméricos entrem
         ))
     if not registros: return
     query = """
@@ -85,29 +100,30 @@ def salvar_gastos(cursor, deputado_id, dados):
     """
     execute_batch(cursor, query, registros)
 
-# ==========================================================
-# COLETA DE DESPESAS DE UM DEPUTADO
-# ==========================================================
-def coletar_deputado(deputado_id):
-    logging.info(f"Iniciando coleta deputado {deputado_id}")
+def coletar_deputado(dep_dict):
+    dep_id = dep_dict["id"]
+    logging.info(f"Processando: {dep_dict['nome']} ({dep_dict['uf']})")
     session = criar_sessao()
     conn = psycopg2.connect(**DB_CONFIG)
     cursor = conn.cursor()
     
     try:
-        # Garante que o deputado existe para respeitar a Foreign Key
+        # Garante o deputado com Nome, Partido e UF reais antes dos gastos
         cursor.execute("""
-            INSERT INTO deputados (deputado_id, nome, partido)
-            VALUES (%s, %s, %s) ON CONFLICT (deputado_id) DO NOTHING;
-        """, (deputado_id, "Nome Indisponível", "S/P"))
+            INSERT INTO deputados (deputado_id, nome, partido, uf)
+            VALUES (%s, %s, %s, %s) 
+            ON CONFLICT (deputado_id) DO UPDATE SET 
+                nome = EXCLUDED.nome, 
+                partido = EXCLUDED.partido,
+                uf = EXCLUDED.uf;
+        """, (dep_id, dep_dict["nome"], dep_dict["partido"], dep_dict["uf"]))
         conn.commit()
 
-        ultima_data = obter_ultima_data(cursor, deputado_id)
+        ultima_data = obter_ultima_data(cursor, dep_id)
         pagina = 1
-
         while True:
             params = {"pagina": pagina, "itens": 100, "ordem": "ASC", "ordenarPor": "dataDocumento"}
-            resposta = session.get(API_DEPUTADO_DESESPESAS.format(deputado_id=deputado_id), params=params, timeout=30)
+            resposta = session.get(API_DEPUTADO_DESESPESAS.format(deputado_id=dep_id), params=params, timeout=30)
             if resposta.status_code != 200: break
             dados = resposta.json().get("dados", [])
             if not dados: break
@@ -116,34 +132,35 @@ def coletar_deputado(deputado_id):
                 dados = [item for item in dados if datetime.strptime(item.get("dataDocumento"), "%Y-%m-%d").date() > ultima_data]
             
             if not dados: break
-            salvar_gastos(cursor, deputado_id, dados)
+            salvar_gastos(cursor, dep_id, dados)
             conn.commit()
             pagina += 1
     except Exception as e:
-        logging.error(f"Erro deputado {deputado_id}: {e}")
+        logging.error(f"Erro no deputado {dep_id}: {e}")
         conn.rollback()
     finally:
         cursor.close()
         conn.close()
 
-def coletar_varios(deputados_ids):
+def coletar_varios(deputados_lista):
     logging.info("==== INÍCIO DA COLETA ====")
-    for i in range(0, len(deputados_ids), MAX_WORKERS):
-        batch = deputados_ids[i:i+MAX_WORKERS]
+    # Processa em lotes (batches) para respeitar o limite de workers
+    for i in range(0, len(deputados_lista), MAX_WORKERS):
+        batch = deputados_lista[i:i+MAX_WORKERS]
         with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
-            futures = [executor.submit(coletar_deputado, dep_id) for dep_id in batch]
+            futures = [executor.submit(coletar_deputado, dep) for dep in batch]
             for future in as_completed(futures):
                 try: future.result()
-                except Exception as e: logging.error(f"Erro thread: {e}")
+                except Exception as e: logging.error(f"Erro na thread: {e}")
     logging.info("==== FIM DA COLETA ====")
 
 # ==========================================================
 # PONTO DE ENTRADA
 # ==========================================================
 if __name__ == "__main__":
-    print("Obtendo lista completa de deputados...")
-    todos_deputados = obter_todos_deputados()
-    print("Executando coleta inicial...")
-    coletar_varios(todos_deputados)
-    print("Sucesso: Coleta finalizada.")
+    print("Iniciando processo de coleta...")
+    lista_deputados = obter_todos_deputados()
+    coletar_varios(lista_deputados)
+    print("Processo concluído com sucesso!")
+
 
