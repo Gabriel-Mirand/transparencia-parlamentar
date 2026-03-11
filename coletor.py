@@ -67,11 +67,11 @@ def criar_sessao():
     return session
 
 # ==========================================================
-# PEGAR TODOS OS DEPUTADOS
+# PEGAR TODOS OS DEPUTADOS (ATUALIZADO PARA PEGAR NOME, PARTIDO E UF)
 # ==========================================================
 def obter_todos_deputados():
     session = criar_sessao()
-    deputados_ids = []
+    deputados_completos = []
     pagina = 1
 
     while True:
@@ -85,74 +85,39 @@ def obter_todos_deputados():
         if not dados:
             break
 
-        deputados_ids.extend([dep["id"] for dep in dados])
+        for dep in dados:
+            deputados_completos.append({
+                "id": dep["id"],
+                "nome": dep["nome"],
+                "partido": dep.get("siglaPartido", "S/P"),
+                "uf": dep.get("siglaUf", "??")
+            })
         pagina += 1
 
-    logging.info(f"Total de deputados encontrados: {len(deputados_ids)}")
-    return deputados_ids
+    logging.info(f"Total de deputados encontrados: {len(deputados_completos)}")
+    return deputados_completos
 
 # ==========================================================
-# FUNÇÕES DE BANCO
+# COLETA DE DESPESAS DE UM DEPUTADO (ATUALIZADA)
 # ==========================================================
-
-def salvar_deputado_basico(cursor, dep_id):
-    # Insere o deputado se ele não existir, para não dar erro de chave estrangeira
-    query = """
-        INSERT INTO deputados (deputado_id, nome, partido)
-        VALUES (%s, %s, %s)
-        ON CONFLICT (deputado_id) DO NOTHING;
-    """
-    # Como pegamos apenas o ID no início, salvamos valores genéricos que podem ser atualizados depois
-    cursor.execute(query, (dep_id, "Nome Indisponível", "S/P"))
-
-def obter_ultima_data(cursor, deputado_id):
-    cursor.execute("SELECT MAX(data) FROM gastos WHERE deputado_id = %s", (deputado_id,))
-    return cursor.fetchone()[0]
-
-def salvar_gastos(cursor, deputado_id, dados):
-    registros = []
-    for item in dados:
-        data_doc = item.get("dataDocumento")
-        if not data_doc: 
-            continue
-            
-        # Montamos a tupla na ordem das colunas do seu INSERT
-        registros.append((
-            deputado_id,
-            data_doc,
-            item.get("valorDocumento"),
-            item.get("tipoDespesa"), # Isso vai para a coluna 'descricao'
-            item.get("codDocumento")  # Isso vai para a coluna 'cod_documento'
-        ))
-        
-    if not registros: 
-        return
-
-    # O SQL usa os nomes das colunas que você criou no Supabase
-    query = """
-        INSERT INTO gastos (deputado_id, data, valor, descricao, cod_documento)
-        VALUES (%s, %s, %s, %s, %s)
-        ON CONFLICT (cod_documento) DO NOTHING;
-    """
-    execute_batch(cursor, query, registros)
-
-
-# ==========================================================
-# COLETA DE DESPESAS DE UM DEPUTADO
-# ==========================================================
-def coletar_deputado(deputado_id):
-    logging.info(f"Iniciando coleta deputado {deputado_id}")
+def coletar_deputado(dep_dict):
+    deputado_id = dep_dict["id"]
+    logging.info(f"Iniciando coleta deputado {deputado_id} - {dep_dict['nome']}")
     session = criar_sessao()
     conn = psycopg2.connect(**DB_CONFIG)
     cursor = conn.cursor()
     pagina = 1
 
     try:
+        # Insere/Atualiza os dados reais do deputado incluindo UF
         cursor.execute("""
-            INSERT INTO deputados (deputado_id, nome, partido)
-            VALUES (%s, %s, %s)
-            ON CONFLICT (deputado_id) DO NOTHING;
-        """, (deputado_id, "Carregando...", "S/P"))
+            INSERT INTO deputados (deputado_id, nome, partido, uf)
+            VALUES (%s, %s, %s, %s)
+            ON CONFLICT (deputado_id) DO UPDATE SET 
+                nome = EXCLUDED.nome, 
+                partido = EXCLUDED.partido,
+                uf = EXCLUDED.uf;
+        """, (deputado_id, dep_dict["nome"], dep_dict["partido"], dep_dict["uf"]))
         conn.commit()
         
         ultima_data = obter_ultima_data(cursor, deputado_id)
@@ -168,9 +133,7 @@ def coletar_deputado(deputado_id):
             if not dados:
                 break
 
-            # filtrar apenas gastos novos
             if dados and ultima_data is not None:
-                # Só filtra se já houver dados no banco (ultima_data não é None)
                 dados = [item for item in dados if datetime.strptime(item.get("dataDocumento"), "%Y-%m-%d").date() > ultima_data]
             
             if not dados:
@@ -185,38 +148,29 @@ def coletar_deputado(deputado_id):
     except Exception as e:
         logging.error(f"Erro deputado {deputado_id}: {e}")
         conn.rollback()
-
     finally:
         cursor.close()
         conn.close()
 
 # ==========================================================
-# COLETA DE VÁRIOS DEPUTADOS EM PARALELO
+# COLETA DE VÁRIOS DEPUTADOS (ATUALIZADA)
 # ==========================================================
-def coletar_varios(deputados_ids):
+def coletar_varios(deputados_lista):
     logging.info("==== INÍCIO DA COLETA ====")
-    for i in range(0, len(deputados_ids), MAX_WORKERS):
-        batch = deputados_ids[i:i+MAX_WORKERS]
+    for i in range(0, len(deputados_lista), MAX_WORKERS):
+        batch = deputados_lista[i:i+MAX_WORKERS]
         with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
-            futures = [executor.submit(coletar_deputado, dep_id) for dep_id in batch]
+            # Agora passamos o dicionário completo 'dep' para a função
+            futures = [executor.submit(coletar_deputado, dep) for dep in batch]
             for future in as_completed(futures):
-                try: future.result()
-                except Exception as e: logging.error(f"Erro thread: {e}")
+                try:
+                    future.result()
+                except Exception as e:
+                    logging.error(f"Erro thread: {e}")
     logging.info("==== FIM DA COLETA ====")
 
 # ==========================================================
-# AGENDAMENTO DIÁRIO - UTILIZE APENAS QUANDO ESTIVER RODANDO LOCALMENTE - NÃO UTILIZAR NO GITHUB
-# O AGENDAMENTO DIÁRIO DEVE SER = False VER LINHA 41
-# ==========================================================
-def iniciar_agendamento(deputados_ids):
-    schedule.every().day.at(HORARIO_EXECUCAO).do(lambda: coletar_varios(deputados_ids))
-    print(f"Agendado para executar diariamente às {HORARIO_EXECUCAO}")
-    while True:
-        schedule.run_pending()
-        time.sleep(60)
-
-# ==========================================================
-# PONTO DE ENTRADA
+# PONTO DE ENTRADA (CORRIGIDO)
 # ==========================================================
 if __name__ == "__main__":
     print("Obtendo lista completa de deputados...")
@@ -228,8 +182,4 @@ if __name__ == "__main__":
     if ATIVAR_AGENDAMENTO:
         iniciar_agendamento(todos_deputados)
     else:
-        print("Coleta finalizada. Script encerrado para o GitHub Actions.")
-
-
-
-
+        print("Coleta finalizada. Script encerrado.")
