@@ -35,11 +35,14 @@ DB_CONFIG = {
     "sslmode": "require" 
 
 # ==========================================================
-# FUNÇÃO PARA CARREGAR DADOS (VERSÃO CORRIGIDA)
+# CONFIGURAÇÃO DO BANCO (REMOVIDO DB_CONFIG ANTIGO)
 # ==========================================================
+
+# Use diretamente a função carregar_dados abaixo:
+
 @st.cache_data(ttl=600)
 def carregar_dados():
-    # O Streamlit busca as credenciais sozinho em [connections.postgresql] nos Secrets
+    # O Streamlit busca as credenciais sozinho nos Secrets [connections.postgresql]
     conn = st.connection("postgresql", type="sql")
 
     query = """
@@ -54,19 +57,15 @@ def carregar_dados():
     """
 
     # O método .query() já retorna um DataFrame do Pandas
-    df = conn.query(query)
+    return conn.query(query)
 
-    # Tratamento de tipos e colunas extras
-    df["data"] = pd.to_datetime(df["data"])
-    df["valor"] = pd.to_numeric(df["valor"])
-    df["mes_ano"] = df["data"].dt.to_period("M").astype(str)
-    df["deputado_partido"] = df["nome"] + " (" + df["partido"] + ")"
-
-    return df
-
-# Agora chame a função
+# Chame a função e trate os dados logo em seguida
 df = carregar_dados()
 
+# Tratamento essencial para o restante do código funcionar
+df["data"] = pd.to_datetime(df["data"])
+df["valor"] = pd.to_numeric(df["valor"])
+df["deputado_partido"] = df["nome"] + " (" + df["partido"] + ")"
 
 # ==========================================================
 # SIDEBAR — FILTROS
@@ -495,4 +494,5 @@ st.dataframe(
     use_container_width=True
 
 )
+
 
