@@ -4,6 +4,7 @@
 import requests
 import logging
 import psycopg2
+import time
 from psycopg2.extras import execute_batch
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
@@ -190,6 +191,7 @@ if __name__ == "__main__":
     lista_deputados = obter_todos_deputados()
     coletar_varios(lista_deputados)
     print("Processo concluído com sucesso!")
+
 
 
 
