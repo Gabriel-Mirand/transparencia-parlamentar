@@ -9,7 +9,7 @@ on:
 
 jobs:
   executar_coletor:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
 
     steps:
       # 1. Baixa o seu código do repositório para a máquina virtual
