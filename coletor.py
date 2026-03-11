@@ -19,8 +19,8 @@ load_dotenv()
 # ==========================================================
 # CONFIGURAÇÕES
 # ==========================================================
-API_DEPUTADOS = "https://dadosabertos.camara.leg.br"
-API_DEPUTADO_DESESPESAS = "https://dadosabertos.camara.leg.br{deputado_id}/despesas.json"
+API_DEPUTADOS = "https://dadosabertos.camara.leg.br/api/v2/deputados"
+API_DEPUTADO_DESESPESAS = "https://dadosabertos.camara.leg.br/api/v2/deputados/{deputado_id}/despesas"
 
 DB_CONFIG = {
     "dbname": os.getenv("DB_NAME"),
@@ -191,6 +191,7 @@ if __name__ == "__main__":
     lista_deputados = obter_todos_deputados()
     coletar_varios(lista_deputados)
     print("Processo concluído com sucesso!")
+
 
 
 
