@@ -18,19 +18,22 @@ st.title("📊 Transparência de Gastos Parlamentares")
 st.markdown("Como o seu deputado tem gasto a cota parlamentar?")
 
 # ==========================================================
-# CONFIGURAÇÃO DO BANCO (USANDO .ENV)
+# CONFIGURAÇÃO DO BANCO (ADAPTADA PARA CLOUD)
 # ==========================================================
-
-# Carregar variáveis do arquivo .env
 load_dotenv()
 
+# Tenta pegar do Streamlit Cloud (st.secrets), se não existir, pega do os.getenv (.env local)
+def get_config(key):
+    return st.secrets.get(key) if key in st.secrets else os.getenv(key)
+
 DB_CONFIG = {
-    "dbname": os.getenv("DB_NAME"),
-    "user": os.getenv("DB_USER"),
-    "password": os.getenv("DB_PASSWORD"),
-    "host": os.getenv("DB_HOST"),
-    "port": os.getenv("DB_PORT")
-}
+    "dbname": get_config("DB_NAME"),
+    "user": get_config("DB_USER"),
+    "password": get_config("DB_PASSWORD"),
+    "host": get_config("DB_HOST"),
+    "port": int(get_config("DB_PORT") or 6543),
+    "sslmode": "require" 
+
 # ==========================================================
 # FUNÇÃO PARA CARREGAR DADOS
 # ==========================================================
@@ -487,4 +490,5 @@ st.subheader("📄 Lista Completa de Gastos")
 st.dataframe(
     df_filtrado.sort_values("data", ascending=False),
     use_container_width=True
+
 )
