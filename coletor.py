@@ -69,7 +69,7 @@ def obter_todos_deputados():
     pagina = 1
     while True:
         params = {"ordem": "ASC", "ordenarPor": "nome", "itens": 100, "pagina": pagina}
-        resposta = session.get(URL, params=params, timeout=(15, 60))
+        resposta = session.get(API_DEPUTADOS, params=params, timeout=(15, 60))
         
         time.sleep(2)
         
@@ -190,6 +190,7 @@ if __name__ == "__main__":
     lista_deputados = obter_todos_deputados()
     coletar_varios(lista_deputados)
     print("Processo concluído com sucesso!")
+
 
 
 
