@@ -41,15 +41,21 @@ logging.basicConfig(
 
 def criar_sessao():
     session = requests.Session()
+    # Adiciona identificação para a API não bloquear a requisição
+    session.headers.update({
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+        'Accept': 'application/json'
+    })
     retry = Retry(
         total=5,
         backoff_factor=1,
-        status_forcelist=[500, 502, 503, 504],
+        status_forcelist=[429, 500, 502, 503, 504], # Incluímos o erro 429 (muitas requisições)
         allowed_methods=["GET"]
     )
     adapter = HTTPAdapter(max_retries=retry)
     session.mount("https://", adapter)
     return session
+
 
 # ==========================================================
 # FUNÇÕES DE BANCO E COLETA
@@ -162,5 +168,6 @@ if __name__ == "__main__":
     lista_deputados = obter_todos_deputados()
     coletar_varios(lista_deputados)
     print("Processo concluído com sucesso!")
+
 
 
