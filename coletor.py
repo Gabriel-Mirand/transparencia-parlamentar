@@ -146,6 +146,7 @@ def coletar_deputado(dep_dict):
         while True:
             params = {"pagina": pagina, "itens": 100, "ordem": "ASC", "ordenarPor": "dataDocumento"}
             resposta = session.get(API_DEPUTADO_DESESPESAS.format(deputado_id=dep_id), params=params, timeout=30)
+            time.sleep(1) 
             if resposta.status_code != 200: break
             dados = resposta.json().get("dados", [])
             if not dados: break
@@ -184,6 +185,7 @@ if __name__ == "__main__":
     lista_deputados = obter_todos_deputados()
     coletar_varios(lista_deputados)
     print("Processo concluído com sucesso!")
+
 
 
 
