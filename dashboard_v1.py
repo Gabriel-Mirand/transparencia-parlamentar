@@ -35,11 +35,12 @@ DB_CONFIG = {
     "sslmode": "require" 
 
 # ==========================================================
-# FUNÇÃO PARA CARREGAR DADOS
+# FUNÇÃO PARA CARREGAR DADOS (VERSÃO CORRIGIDA)
 # ==========================================================
-@st.cache_data
+@st.cache_data(ttl=600)
 def carregar_dados():
-    conn = psycopg2.connect(**DB_CONFIG)
+    # O Streamlit busca as credenciais sozinho em [connections.postgresql] nos Secrets
+    conn = st.connection("postgresql", type="sql")
 
     query = """
         SELECT 
@@ -52,18 +53,20 @@ def carregar_dados():
         JOIN deputados d ON g.deputado_id = d.deputado_id
     """
 
-    df = pd.read_sql(query, conn)
-    conn.close()
+    # O método .query() já retorna um DataFrame do Pandas
+    df = conn.query(query)
 
+    # Tratamento de tipos e colunas extras
     df["data"] = pd.to_datetime(df["data"])
-    df["mes"] = df["data"].dt.to_period("M").astype(str)
-
-    # Criar coluna nome + partido
+    df["valor"] = pd.to_numeric(df["valor"])
+    df["mes_ano"] = df["data"].dt.to_period("M").astype(str)
     df["deputado_partido"] = df["nome"] + " (" + df["partido"] + ")"
 
     return df
 
+# Agora chame a função
 df = carregar_dados()
+
 
 # ==========================================================
 # SIDEBAR — FILTROS
@@ -492,3 +495,4 @@ st.dataframe(
     use_container_width=True
 
 )
+
