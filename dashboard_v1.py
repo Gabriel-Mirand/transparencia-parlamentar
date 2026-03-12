@@ -37,7 +37,14 @@ def carregar_dados():
 # --- EXECUÇÃO SEGURA ---
 try:
     df = carregar_dados()
-    
+    # Cria um mapeamento de cores fixo para todas as descrições da base
+    todas_descricoes = sorted(df["descricao"].unique())
+    cores_disponiveis = px.colors.qualitative.Alphabet # Paleta com 26 cores diferentes
+
+    # Dicionário que liga cada tipo de gasto a uma cor específica
+    mapa_cores_fixo = {desc: cores_disponiveis[i % len(cores_disponiveis)] for i, desc in enumerate(todas_descricoes)}
+    mapa_cores_fixo["Outros"] = "#808080" # Força o cinza para o grupo "Outros"
+
     # Só faz o tratamento se o df foi criado com sucesso
     if df is not None and not df.empty:
         df["data"] = pd.to_datetime(df["data"])
@@ -288,6 +295,13 @@ st.divider()
 # ==========================================================
 st.subheader("📊 Análise dos Deputados Selecionados")
 
+# --- NOVIDADE: Criar o mapa de cores fixo para todos os tipos de gastos ---
+todas_descricoes = sorted(df["descricao"].unique())
+cores_disponiveis = px.colors.qualitative.Alphabet # Paleta com muitas cores
+mapa_cores_fixo = {desc: cores_disponiveis[i % len(cores_disponiveis)] for i, desc in enumerate(todas_descricoes)}
+mapa_cores_fixo["Outros"] = "#808080" # Cinza para o grupo Outros
+# --------------------------------------------------------------------------
+
 comparacao = df_filtrado.groupby("deputado_partido")["valor"].sum().reset_index()
 
 fig_comp = px.bar(comparacao, x="deputado_partido", y="valor", title="Comparativo de Gastos")
@@ -302,13 +316,26 @@ for deputado in df_filtrado["deputado_partido"].unique():
         # Agrupar menores que 2%
         total_dep = gasto_tipo["valor"].sum()
         gasto_tipo["pct"] = (gasto_tipo["valor"] / total_dep) * 100
-        maiores = gasto_tipo[gasto_tipo["pct"] >= 2]
+        maiores = gasto_tipo[gasto_tipo["pct"] >= 2].copy() # .copy() evita avisos do pandas
         outros_val = gasto_tipo[gasto_tipo["pct"] < 2]["valor"].sum()
         
         if outros_val > 0:
-            maiores = pd.concat([maiores, pd.DataFrame([{"descricao": "Outros", "valor": outros_val}])])
+            novo_item = pd.DataFrame([{"descricao": "Outros", "valor": outros_val}])
+            maiores = pd.concat([maiores, novo_item], ignore_index=True)
         
-        fig_pie = px.pie(maiores, names="descricao", values="valor", title=f"Distribuição: {deputado}")
+        # AJUSTE NO GRÁFICO: Adicionamos color e color_discrete_map
+        fig_pie = px.pie(
+            maiores, 
+            names="descricao", 
+            values="valor", 
+            title=f"Distribuição: {deputado}",
+            color="descricao",
+            color_discrete_map=mapa_cores_fixo
+        )
+        
+        # Melhora a legenda para não ficar cortada no celular
+        fig_pie.update_layout(legend=dict(orientation="h", yanchor="bottom", y=-0.5))
+        
         st.plotly_chart(fig_pie, use_container_width=True)
 
 st.divider()
@@ -428,6 +455,7 @@ st.dataframe(
         "descricao": "Descrição"
     }
 )
+
 
 
 
