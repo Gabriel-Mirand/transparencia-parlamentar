@@ -18,21 +18,13 @@ st.title("📊 Transparência de Gastos Parlamentares")
 st.markdown("Como o seu deputado tem gasto a cota parlamentar?")
 
 # ==========================================================
-# FUNÇÃO PARA CARREGAR DADOS (VERSÃO FINAL)
+# FUNÇÃO PARA CARREGAR DADOS (VERSÃO SIMPLIFICADA)
 # ==========================================================
 @st.cache_data(ttl=600)
 def carregar_dados():
-    # O Streamlit busca as credenciais nos Secrets [connections.postgresql]
-    # connect_args resolvem o conflito com o Pooler e SSL do Supabase
-    conn = st.connection(
-        "postgresql", 
-        type="sql",
-        connect_args={
-            "sslmode": "require", 
-            "prepare_threshold": 0
-        }
-    )
-
+    # O Streamlit vai ler automaticamente a "url" que você colou nos Secrets
+    conn = st.connection("postgresql", type="sql")
+    
     query = """
         SELECT 
             d.nome,
@@ -43,17 +35,22 @@ def carregar_dados():
         FROM gastos g
         JOIN deputados d ON g.deputado_id = d.deputado_id
     """
-
-    # O método .query() já retorna um DataFrame do Pandas
+    
+    # O método .query() já entrega o DataFrame pronto
     return conn.query(query)
 
-# Chame a função para popular o DF
-df = carregar_dados()
+# --- CHAMADA E TRATAMENTO DOS DADOS ---
+try:
+    df = carregar_dados()
 
-# Mantenha os tratamentos de colunas logo abaixo
-df["data"] = pd.to_datetime(df["data"])
-df["valor"] = pd.to_numeric(df["valor"])
-df["deputado_partido"] = df["nome"] + " (" + df["partido"] + ")"
+    # Garante que os tipos de dados funcionem nos gráficos
+    df["data"] = pd.to_datetime(df["data"])
+    df["valor"] = pd.to_numeric(df["valor"])
+    df["deputado_partido"] = df["nome"] + " (" + df["partido"] + ")"
+
+except Exception as e:
+    st.error(f"Erro ao carregar dados do banco: {e}")
+    st.stop()
 
 # ==========================================================
 # SIDEBAR — FILTROS
@@ -482,6 +479,7 @@ st.dataframe(
     use_container_width=True
 
 )
+
 
 
 
