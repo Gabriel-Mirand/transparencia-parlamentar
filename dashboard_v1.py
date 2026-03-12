@@ -358,7 +358,7 @@ st.markdown(f"🔎 Analisando gastos acima de **R$ {limite:,.2f}** no filtro atu
 acima_media = df_filtrado[df_filtrado["valor"] > limite]
 
 if not acima_media.empty:
-    st.warning(f"🚨 Detectados {len(acima_media)} gastos suspeitos ou elevados.")
+    st.warning(f"🚨 Detectados {len(acima_media)} gastos muito acima da média.")
     
     # Tabela simplificada para o celular (formatada)
     st.dataframe(
@@ -428,6 +428,7 @@ st.dataframe(
         "descricao": "Descrição"
     }
 )
+
 
 
 
