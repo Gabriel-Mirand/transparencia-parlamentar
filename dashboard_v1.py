@@ -489,11 +489,15 @@ st.divider()
 # ==========================================================
 st.subheader("📄 Lista Completa de Gastos")
 
-st.dataframe(
-    df_filtrado.sort_values("data", ascending=False),
-    use_container_width=True
+# Lista apenas as colunas amigáveis para o usuário ver
+colunas_visiveis = ["data", "nome", "partido", "valor", "descricao"]
 
+st.dataframe(
+    df_filtrado[colunas_visiveis].sort_values("data", ascending=False),
+    use_container_width=True,
+    hide_index=True # Remove a coluna de números à esquerda, economizando espaço no celular
 )
+
 
 
 
