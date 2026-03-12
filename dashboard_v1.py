@@ -314,6 +314,105 @@ for deputado in df_filtrado["deputado_partido"].unique():
 st.divider()
 
 # ==========================================================
+# 📈 EVOLUÇÃO MENSAL (RESPONSIVO)
+# ==========================================================
+st.subheader("📈 Evolução Mensal")
+
+# Agrupamento para o gráfico de linhas
+mensal = (
+    df_filtrado.groupby(["mes", "deputado_partido"])["valor"]
+    .sum()
+    .reset_index()
+)
+
+fig_linha = px.line(
+    mensal,
+    x="mes",
+    y="valor",
+    color="deputado_partido",
+    markers=True,
+    labels={"mes": "Mês", "valor": "Total Gasto (R$)", "deputado_partido": "Deputado"},
+    title="Gastos ao longo do tempo"
+)
+
+# use_container_width garante que o gráfico não "estoure" a tela do celular
+st.plotly_chart(fig_linha, use_container_width=True)
+st.divider()
+
+# ==========================================================
+# ⚠️ GASTOS MUITO ACIMA DA MÉDIA (BASE COMPLETA)
+# ==========================================================
+st.subheader("⚠️ Alertas: Gastos Fora do Padrão")
+
+# Média da base COMPLETA (todos os deputados no período)
+media_geral = df["valor"].mean()
+limite = media_geral * 5
+
+# Exibição em métricas para facilitar leitura no celular
+col_m1, col_m2 = st.columns(2)
+col_m1.metric("Média Geral por Nota", f"R$ {media_geral:,.2f}")
+col_m2.metric("Limite p/ Alerta (5x)", f"R$ {limite:,.2f}")
+
+st.markdown(f"🔎 Analisando gastos acima de **R$ {limite:,.2f}** no filtro atual.")
+
+acima_media = df_filtrado[df_filtrado["valor"] > limite]
+
+if not acima_media.empty:
+    st.warning(f"🚨 Detectados {len(acima_media)} gastos suspeitos ou elevados.")
+    
+    # Tabela simplificada para o celular (formatada)
+    st.dataframe(
+        acima_media[["data", "nome", "valor", "descricao"]].sort_values("valor", ascending=False),
+        use_container_width=True,
+        hide_index=True,
+        column_config={
+            "data": st.column_config.DateColumn("Data", format="DD/MM/YYYY"),
+            "valor": st.column_config.NumberColumn("Valor", format="R$ %.2f")
+        }
+    )
+else:
+    st.success("✅ Nenhum gasto muito acima da média encontrado nos filtros atuais.")
+
+st.divider()
+
+# ==========================================================
+# 🏆 RANKING DE GASTOS ATÍPICOS (ACIMA DA MÉDIA)
+# ==========================================================
+st.subheader("🏆 Ranking de Gastos Acima da Média")
+
+if not acima_media.empty:
+    ranking_acima = (
+        acima_media
+        .groupby(["nome", "partido"])
+        .agg(
+            qtd_ocorrencias=("valor", "count"),
+            total_acima=("valor", "sum")
+        )
+        .reset_index()
+        .sort_values(by="qtd_ocorrencias", ascending=False)
+    )
+
+    # Exibição do Top 3 em colunas (melhor para celular)
+    r_cols = st.columns(min(len(ranking_acima), 3))
+    medalhas = ["🥇", "🥈", "🥉"]
+
+    for i, row in ranking_acima.head(3).iterrows():
+        with r_cols[i]:
+            st.metric(
+                label=f"{medalhas[i]} {row['nome']}", 
+                value=f"{row['qtd_ocorrencias']} notas",
+                delta=f"R$ {row['total_acima']:,.0f} total",
+                delta_color="inverse" # Fica vermelho/alerta
+            )
+
+    with st.expander("📊 Ver ranking completo de anomalias"):
+        st.dataframe(ranking_acima, use_container_width=True, hide_index=True)
+else:
+    st.info("Nenhum dado atípico para gerar ranking.")
+
+st.divider()
+
+# ==========================================================
 # 📄 TABELA FINAL FORMATADA (MUITO MELHOR NO CELULAR)
 # ==========================================================
 st.subheader("📄 Lista Completa de Gastos")
@@ -329,5 +428,6 @@ st.dataframe(
         "descricao": "Descrição"
     }
 )
+
 
 
