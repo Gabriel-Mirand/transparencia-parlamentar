@@ -17,106 +17,35 @@ st.set_page_config(page_title="Transparência Parlamentar", layout="wide")
 st.title("📊 Transparência de Gastos Parlamentares")
 st.markdown("Como o seu deputado tem gasto a cota parlamentar?")
 st.markdown("Os gráficos abaixo apresentam uma visão geral dos gastos parlamentares. Para realizar comparativos e visualizar detalhes específicos, selecione os deputados na barra lateral.")
-
+#==================================================
 # ==========================================================
-# CARREGAMENTO E TRATAMENTO (SÓ RODA UMA VEZ)
+# FUNÇÃO PARA CARREGAR DADOS (RESTAURADA)
 # ==========================================================
+@st.cache_data(ttl=600)
+def carregar_dados():
+    # O Streamlit busca a 'url' nos Secrets [connections.postgresql] automaticamente
+    conn = st.connection("postgresql", type="sql")
+    
+    query = """
+        SELECT d.nome, d.partido, g.data, g.valor, g.descricao, d.deputado_id
+        FROM gastos g
+        JOIN deputados d ON g.deputado_id = d.deputado_id
+    """
+    return conn.query(query)
 
+# --- EXECUÇÃO DO CARREGAMENTO ---
 try:
     df = carregar_dados()
     
-    # --- TRATAMENTO INICIAL (Essencial para os filtros de tempo) ---
+    # Tratamentos essenciais para o seu código antigo funcionar
     df["data"] = pd.to_datetime(df["data"])
     df["valor"] = pd.to_numeric(df["valor"])
-    df["mes_ano"] = df["data"].dt.to_period("M").astype(str)
     df["deputado_partido"] = df["nome"] + " (" + df["partido"] + ")"
-
-    # ==========================================================
-    # SIDEBAR - FILTRO DE TEMPO (O ÚNICO QUE AFETA A INTRODUÇÃO)
-    # ==========================================================
-    st.sidebar.header("📅 Período de Análise")
-    periodos = sorted(df["mes_ano"].unique())
-    periodo_inicio = st.sidebar.selectbox("Início", periodos, index=0)
-    periodo_fim = st.sidebar.selectbox("Fim", periodos, index=len(periodos)-1)
-
-    # Base da Câmara filtrada APENAS pelo tempo
-    df_camera_total = df[(df["mes_ano"] >= periodo_inicio) & (df["mes_ano"] <= periodo_fim)]
-
-    # ==========================================================
-    # 🏛️ 1. GASTO TOTAL DA CÂMARA (APARECE DE CARA)
-    # ==========================================================
-    st.header("🏛️ Visão Geral da Câmara")
-    
-    total_camera = df_camera_total["valor"].sum()
-    qtd_notas = len(df_camera_total)
-    
-    c1, c2 = st.columns(2)
-    c1.metric("Total Gasto pela Câmara", f"R$ {total_camera:,.2f}")
-    c2.metric("Total de Notas Fiscais", f"{qtd_notas:,}".replace(",", "."))
-    
-    st.divider()
-
-    # ==========================================================
-    # 🏆 2. PARTIDO CAMPEÃO E MÉDIAS (APARECE DE CARA)
-    # ==========================================================
-    st.subheader("🏆 Gastos por Partido")
-    
-    # Cálculos por Partido
-    total_partido = df_camera_total.groupby("partido")["valor"].sum()
-    deps_partido = df_camera_total.groupby("partido")["nome"].nunique()
-    
-    ranking_p = pd.DataFrame({"total": total_partido, "deps": deps_partido}).reset_index()
-    ranking_p["media"] = ranking_p["total"] / ranking_p["deps"]
-    ranking_p = ranking_p.sort_values("total", ascending=False)
-
-    fig_p = px.bar(ranking_p, x="partido", y="total", title="Total por Partido", color="partido")
-    st.plotly_chart(fig_p, use_container_width=True)
-
-    fig_m = px.bar(ranking_p.sort_values("media", ascending=False), x="partido", y="media", 
-                   title="Média de Gasto por Deputado no Partido", color_discrete_sequence=['#FFA500'])
-    st.plotly_chart(fig_m, use_container_width=True)
-
-    st.divider()
-
-    # ==========================================================
-    # 🥇 3. TOP 3 DEPUTADOS NACIONAL (APARECE DE CARA)
-    # ==========================================================
-    st.subheader("🥇 Top 3 Deputados que Mais Gastaram (Nacional)")
-    
-    top3 = df_camera_total.groupby(["nome", "partido"])["valor"].sum().sort_values(ascending=False).head(3).reset_index()
-    
-    cols_t3 = st.columns(3)
-    meds = ["🥇", "🥈", "🥉"]
-    for i, row in top3.iterrows():
-        cols_t3[i].metric(label=f"{meds[i]} {row['nome']}", 
-                          value=f"R$ {row['valor']:,.2f}", 
-                          delta=row['partido'], delta_color="off")
-
-    st.divider()
-
-    # ==========================================================
-    # 🛑 MENSAGEM DE INSTRUÇÃO E PONTO DE PARADA
-    # ==========================================================
-    st.info("💡 **Aprofunde sua busca:** Os dados acima são gerais da Câmara. Use o menu lateral para selecionar deputados e ver detalhes individuais, evolução e notas fiscais.")
-
-    # Filtro de Deputados na Sidebar
-    deputados_sel = st.sidebar.multiselect(
-        "Selecione Deputados para Detalhar:", 
-        options=sorted(df_camera_total["deputado_partido"].unique())
-    )
-
-    if not deputados_sel:
-        st.stop() # O dashboard para aqui se ninguém for selecionado
-
-    # ==========================================================
-    # 📊 4. DETALHAMENTO INDIVIDUAL (SÓ RODA SE SELECIONAR)
-    # ==========================================================
-    df_filtrado = df_camera_total[df_camera_total["deputado_partido"].isin(deputados_sel)]
-    
-    # ... (Aqui você coloca os blocos de Evolução Mensal, Distribuição e Tabela Final) ...
+    df["mes_ano"] = df["data"].dt.to_period("M").astype(str)
+    df["mes"] = df["mes_ano"]
 
 except Exception as e:
-    st.error(f"Erro ao carregar dashboard: {e}")
+    st.error(f"Erro ao carregar dados do banco: {e}")
     st.stop()
 
 # ==========================================================
@@ -240,6 +169,109 @@ st.sidebar.markdown(
 
 st.sidebar.markdown("---")
 st.sidebar.markdown("Dashboard Versão 1.0")
+
+# ==========================================================
+# 🏆 PARTIDO CAMPEÃO DE GASTOS
+# ==========================================================
+st.subheader("🏆 Gastos por Partido")
+
+# Total gasto por partido
+total_partido = df.groupby("partido")["valor"].sum()
+
+# Número de deputados por partido
+deputados_partido = df.groupby("partido")["nome"].nunique()
+
+# Criar dataframe consolidado
+ranking_partido = pd.DataFrame({
+    "total_gasto": total_partido,
+    "qtd_deputados": deputados_partido
+}).reset_index()
+
+# Calcular média por deputado
+ranking_partido["media_por_deputado"] = (
+    ranking_partido["total_gasto"] / ranking_partido["qtd_deputados"]
+)
+
+# ==========================================================
+# 📊 MÉDIA GERAL DE GASTO POR DEPUTADO (TODOS)
+# ==========================================================
+
+media_individual = (
+    df.groupby("nome")["valor"]
+    .sum()
+)
+
+media_geral_deputados = media_individual.mean()
+
+# Ordenar por total gasto
+ranking_partido = ranking_partido.sort_values(
+    "total_gasto",
+    ascending=False
+)
+
+# Gráfico de barras (Total)
+fig_partido = px.bar(
+    ranking_partido,
+    x="partido",
+    y="total_gasto",
+    hover_data={
+        "qtd_deputados": True,
+        "media_por_deputado": ':.2f'
+    },
+    title="Total de Gastos por Partido"
+)
+
+st.plotly_chart(fig_partido, use_container_width=True)
+
+fig_media = px.bar(
+    ranking_partido.sort_values("media_por_deputado", ascending=False),
+    x="partido",
+    y="media_por_deputado",
+    title="Média de Gasto por Deputado em Cada Partido"
+)
+
+# Linha horizontal da média geral
+fig_media.add_hline(
+    y=media_geral_deputados,
+    line_dash="dash",
+    line_color="red",
+    annotation_text="Média Geral Nacional",
+    annotation_position="top right"
+)
+
+st.plotly_chart(fig_media, use_container_width=True)
+
+st.info(
+    f"📌 Média geral de gasto por deputado (todos os partidos): "
+    f"R$ {media_geral_deputados:,.2f}"
+)
+
+st.divider()
+
+# ==========================================================
+# 🥇 TOP 3 DEPUTADOS QUE MAIS GASTARAM
+# ==========================================================
+st.subheader("🥇 Top 3 Deputados que Mais Gastaram")
+
+ranking_deputados = (
+    df.groupby(["nome", "partido"])["valor"]
+    .sum()
+    .sort_values(ascending=False)
+    .head(3)
+    .reset_index()
+)
+
+medalhas = ["🥇", "🥈", "🥉"]
+
+if not ranking_deputados.empty:
+    for i, row in ranking_deputados.iterrows():
+        st.markdown(
+            f"### {medalhas[i]} {row['nome']} ({row['partido']}) — R$ {row['valor']:,.2f}"
+        )
+else:
+    st.info("Não há dados suficientes para gerar o ranking.")
+
+st.divider()
 
 # ==========================================================
 # 📊 COMPARAÇÃO E DISTRIBUIÇÃO (POR DEPUTADO SELECIONADO)
@@ -411,6 +443,7 @@ st.dataframe(
         "descricao": "Descrição"
     }
 )
+
 
 
 
