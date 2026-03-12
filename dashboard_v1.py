@@ -3,6 +3,7 @@
 # ==========================================================
 import streamlit as st
 import pandas as pd
+import psycopg2
 import plotly.express as px
 import numpy as np
 import os
@@ -481,6 +482,7 @@ st.dataframe(
     use_container_width=True
 
 )
+
 
 
 
