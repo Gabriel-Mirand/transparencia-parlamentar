@@ -20,26 +20,31 @@ st.markdown("Como o seu deputado tem gasto a cota parlamentar?")
 # ==========================================================
 # FUNÇÃO PARA CARREGAR DADOS (VERSÃO SIMPLIFICADA)
 # ==========================================================
+
 @st.cache_data(ttl=600)
 def carregar_dados():
-    # Ele vai ler a 'url' exata que você colou no Secret acima
+    # O Streamlit lê a 'url' limpa do Secret
     conn = st.connection("postgresql", type="sql")
-    
     query = """
         SELECT d.nome, d.partido, g.data, g.valor, g.descricao
         FROM gastos g
         JOIN deputados d ON g.deputado_id = d.deputado_id
     """
-    
-    # O .query() do Streamlit é o método mais estável aqui
     return conn.query(query)
 
-# Chame a função
+# --- EXECUÇÃO SEGURA ---
 try:
     df = carregar_dados()
-    # ... (seus tratamentos de colunas de data e valor abaixo)
+    
+    # Tratamento (Só roda se o df existir)
+    df["data"] = pd.to_datetime(df["data"])
+    df["valor"] = pd.to_numeric(df["valor"])
+    df["deputado_partido"] = df["nome"] + " (" + df["partido"] + ")"
+
 except Exception as e:
-    st.error(f"Erro de conexão: {e}")
+    st.error(f"Erro ao conectar ao banco: {e}")
+    st.stop() # Para o app aqui se der erro, evitando o NameError abaixo
+
 
 # ==========================================================
 # SIDEBAR — FILTROS
@@ -468,6 +473,7 @@ st.dataframe(
     use_container_width=True
 
 )
+
 
 
 
