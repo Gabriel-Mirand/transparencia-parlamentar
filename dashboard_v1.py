@@ -18,23 +18,6 @@ st.title("📊 Transparência de Gastos Parlamentares")
 st.markdown("Como o seu deputado tem gasto a cota parlamentar?")
 
 # ==========================================================
-# CONFIGURAÇÃO DO BANCO (ADAPTADA PARA CLOUD)
-# ==========================================================
-load_dotenv()
-
-# Tenta pegar do Streamlit Cloud (st.secrets), se não existir, pega do os.getenv (.env local)
-def get_config(key):
-    return st.secrets.get(key) if key in st.secrets else os.getenv(key)
-
-DB_CONFIG = {
-    "dbname": get_config("DB_NAME"),
-    "user": get_config("DB_USER"),
-    "password": get_config("DB_PASSWORD"),
-    "host": get_config("DB_HOST"),
-    "port": int(get_config("DB_PORT") or 6543),
-    "sslmode": "require" 
-
-# ==========================================================
 # CONFIGURAÇÃO DO BANCO (REMOVIDO DB_CONFIG ANTIGO)
 # ==========================================================
 
@@ -494,5 +477,6 @@ st.dataframe(
     use_container_width=True
 
 )
+
 
 
