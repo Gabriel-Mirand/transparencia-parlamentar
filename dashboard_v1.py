@@ -405,7 +405,7 @@ st.divider()
 # ==========================================================
 # 🏆 RANKING DE GASTOS ATÍPICOS (ACIMA DA MÉDIA)
 # ==========================================================
-st.subheader("🏆 Ranking de Gastos Acima da Média")
+st.subheader("🏆 Ranking de Deputados com Mais Gastos Acima da Média")
 
 if not acima_media.empty:
     ranking_acima = (
@@ -419,18 +419,23 @@ if not acima_media.empty:
         .sort_values(by="qtd_ocorrencias", ascending=False)
     )
 
-    # Exibição do Top 3 em colunas (melhor para celular)
-    r_cols = st.columns(min(len(ranking_acima), 3))
-    medalhas = ["🥇", "🥈", "🥉"]
+    # PEGA OS TOP 3
+    top_3 = ranking_acima.head(3)
+    
+    # CRIA AS COLUNAS DINAMICAMENTE (Evita o IndexError)
+    num_cols = len(top_3)
+    if num_cols > 0:
+        r_cols = st.columns(num_cols)
+        medalhas = ["🥇", "🥈", "🥉"]
 
-    for i, row in ranking_acima.head(3).iterrows():
-        with r_cols[i]:
-            st.metric(
-                label=f"{medalhas[i]} {row['nome']}", 
-                value=f"{row['qtd_ocorrencias']} notas",
-                delta=f"R$ {row['total_acima']:,.0f} total",
-                delta_color="inverse" # Fica vermelho/alerta
-            )
+        for i, (index, row) in enumerate(top_3.iterrows()):
+            with r_cols[i]:
+                st.metric(
+                    label=f"{medalhas[i]} {row['nome']}", 
+                    value=f"{row['qtd_ocorrencias']} notas",
+                    delta=f"R$ {row['total_acima']:,.0f} total",
+                    delta_color="inverse" 
+                )
 
     with st.expander("📊 Ver ranking completo de anomalias"):
         st.dataframe(ranking_acima, use_container_width=True, hide_index=True)
@@ -455,6 +460,7 @@ st.dataframe(
         "descricao": "Descrição"
     }
 )
+
 
 
 
