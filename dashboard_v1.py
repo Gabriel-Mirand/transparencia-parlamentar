@@ -63,6 +63,105 @@ try:
 
 except Exception as e:
     st.error(f"Erro de conexão: {e}")
+
+    #====================================================
+    #VISÃO GERAL
+    #====================================================
+    # ==========================================================
+    # 🏛️ GASTO TOTAL DA CÂMARA (APENAS FILTRO DE TEMPO)
+    # ==========================================================
+    st.subheader("🏛️ Gasto Total da Câmara no Período")
+
+    # Filtramos a base completa apenas pelo tempo selecionado no sidebar
+    df_camera_total = df[
+        (df["mes_ano"] >= periodo_inicio) & 
+        (df["mes_ano"] <= periodo_fim)
+    ]
+
+    total_camera = df_camera_total["valor"].sum()
+    qtd_total_docs = len(df_camera_total)
+
+    col_cam1, col_cam2 = st.columns(2)
+
+    with col_cam1:
+        st.metric(
+            label="Total Gasto pela Câmara", 
+            value=f"R$ {total_camera:,.2f}"
+        )
+
+    with col_cam2:
+        st.metric(
+            label="Total de Notas Fiscais", 
+            value=f"{qtd_total_docs:,}".replace(",", ".")
+        )
+
+    st.caption(f"📊 Valores baseados em todos os deputados entre {periodo_inicio} e {periodo_fim}.")
+    st.divider()
+
+    # ==========================================================
+    # 🏆 PARTIDO CAMPEÃO DE GASTOS
+    # ==========================================================
+    st.subheader("🏆 Gastos por Partido")
+
+total_partido = df.groupby("partido")["valor"].sum()
+deputados_partido = df.groupby("partido")["nome"].nunique()
+
+ranking_partido = pd.DataFrame({
+    "total_gasto": total_partido,
+    "qtd_deputados": deputados_partido
+}).reset_index()
+
+ranking_partido["media_por_deputado"] = (
+    ranking_partido["total_gasto"] / ranking_partido["qtd_deputados"]
+)
+
+# Média Geral Nacional (calculada para a linha de referência)
+media_geral_deputados = df.groupby("nome")["valor"].sum().mean()
+
+ranking_partido = ranking_partido.sort_values("total_gasto", ascending=False)
+
+# Gráficos em colunas (No PC lado a lado, no Celular um sob o outro)
+fig_partido = px.bar(
+    ranking_partido, x="partido", y="total_gasto",
+    hover_data={"qtd_deputados": True, "media_por_deputado": ':.2f'},
+    title="Total de Gastos por Partido"
+)
+st.plotly_chart(fig_partido, use_container_width=True)
+
+fig_media = px.bar(
+    ranking_partido.sort_values("media_por_deputado", ascending=False),
+    x="partido", y="media_por_deputado",
+    title="Média de Gasto por Deputado"
+)
+fig_media.add_hline(y=media_geral_deputados, line_dash="dash", line_color="red", annotation_text="Média Nacional")
+st.plotly_chart(fig_media, use_container_width=True)
+
+st.info(f"📌 Média nacional de gasto por deputado: R$ {media_geral_deputados:,.2f}")
+st.divider()
+
+# ==========================================================
+# 🥇 TOP 3 DEPUTADOS (LAYOUT EM MÉTRICAS)
+# ==========================================================
+st.subheader("🥇 Top 3 Deputados que Mais Gastaram")
+
+ranking_deputados = (
+    df.groupby(["nome", "partido"])["valor"]
+    .sum().sort_values(ascending=False).head(3).reset_index()
+)
+
+if not ranking_deputados.empty:
+    m_cols = st.columns(3) # No celular, vira uma lista vertical automática
+    medalhas = ["🥇", "🥈", "🥉"]
+    for i, row in ranking_deputados.iterrows():
+        m_cols[i].metric(label=f"{medalhas[i]} {row['nome']}", 
+                         value=f"R$ {row['valor']:,.2f}", 
+                         delta=row['partido'], delta_color="off")
+else:
+    st.info("Sem dados suficientes.")
+
+st.divider()
+
+    
     st.stop()
 
 # --- AQUI COMEÇA O SEU CÓDIGO ORIGINAL (SIDEBAR, FILTROS, ETC.) ---
@@ -195,100 +294,6 @@ st.sidebar.markdown(
 
 st.sidebar.markdown("---")
 st.sidebar.markdown("Dashboard Versão 1.0")
-
-# ==========================================================
-# 🏛️ GASTO TOTAL DA CÂMARA (APENAS FILTRO DE TEMPO)
-# ==========================================================
-st.subheader("🏛️ Gasto Total da Câmara no Período")
-
-# Filtramos a base completa apenas pelo tempo selecionado no sidebar
-df_camera_total = df[
-    (df["mes_ano"] >= periodo_inicio) & 
-    (df["mes_ano"] <= periodo_fim)
-]
-
-total_camera = df_camera_total["valor"].sum()
-qtd_total_docs = len(df_camera_total)
-
-col_cam1, col_cam2 = st.columns(2)
-
-with col_cam1:
-    st.metric(
-        label="Total Gasto pela Câmara", 
-        value=f"R$ {total_camera:,.2f}"
-    )
-
-with col_cam2:
-    st.metric(
-        label="Total de Notas Fiscais", 
-        value=f"{qtd_total_docs:,}".replace(",", ".")
-    )
-
-st.caption(f"📊 Valores baseados em todos os deputados entre {periodo_inicio} e {periodo_fim}.")
-st.divider()
-
-# ==========================================================
-# 🏆 PARTIDO CAMPEÃO DE GASTOS
-# ==========================================================
-st.subheader("🏆 Gastos por Partido")
-
-total_partido = df.groupby("partido")["valor"].sum()
-deputados_partido = df.groupby("partido")["nome"].nunique()
-
-ranking_partido = pd.DataFrame({
-    "total_gasto": total_partido,
-    "qtd_deputados": deputados_partido
-}).reset_index()
-
-ranking_partido["media_por_deputado"] = (
-    ranking_partido["total_gasto"] / ranking_partido["qtd_deputados"]
-)
-
-# Média Geral Nacional (calculada para a linha de referência)
-media_geral_deputados = df.groupby("nome")["valor"].sum().mean()
-
-ranking_partido = ranking_partido.sort_values("total_gasto", ascending=False)
-
-# Gráficos em colunas (No PC lado a lado, no Celular um sob o outro)
-fig_partido = px.bar(
-    ranking_partido, x="partido", y="total_gasto",
-    hover_data={"qtd_deputados": True, "media_por_deputado": ':.2f'},
-    title="Total de Gastos por Partido"
-)
-st.plotly_chart(fig_partido, use_container_width=True)
-
-fig_media = px.bar(
-    ranking_partido.sort_values("media_por_deputado", ascending=False),
-    x="partido", y="media_por_deputado",
-    title="Média de Gasto por Deputado"
-)
-fig_media.add_hline(y=media_geral_deputados, line_dash="dash", line_color="red", annotation_text="Média Nacional")
-st.plotly_chart(fig_media, use_container_width=True)
-
-st.info(f"📌 Média nacional de gasto por deputado: R$ {media_geral_deputados:,.2f}")
-st.divider()
-
-# ==========================================================
-# 🥇 TOP 3 DEPUTADOS (LAYOUT EM MÉTRICAS)
-# ==========================================================
-st.subheader("🥇 Top 3 Deputados que Mais Gastaram")
-
-ranking_deputados = (
-    df.groupby(["nome", "partido"])["valor"]
-    .sum().sort_values(ascending=False).head(3).reset_index()
-)
-
-if not ranking_deputados.empty:
-    m_cols = st.columns(3) # No celular, vira uma lista vertical automática
-    medalhas = ["🥇", "🥈", "🥉"]
-    for i, row in ranking_deputados.iterrows():
-        m_cols[i].metric(label=f"{medalhas[i]} {row['nome']}", 
-                         value=f"R$ {row['valor']:,.2f}", 
-                         delta=row['partido'], delta_color="off")
-else:
-    st.info("Sem dados suficientes.")
-
-st.divider()
 
 # ==========================================================
 # 📊 COMPARAÇÃO E DISTRIBUIÇÃO (POR DEPUTADO SELECIONADO)
@@ -460,6 +465,7 @@ st.dataframe(
         "descricao": "Descrição"
     }
 )
+
 
 
 
