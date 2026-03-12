@@ -3,8 +3,8 @@ name: Coletor de Dados Deputados
 # Define quando o código será executado
 on:
   schedule:
-    # Roda todos os dias às 07:20 UTC (04:20 da manhã no horário de Brasília)
-    - cron: '20 7 * * *'
+    # Roda todos os dias às 10:40 UTC (07:40 da manhã no horário de Brasília)
+    - cron: '40 10 * * *'
   workflow_dispatch: # Permite que você clique em um botão no GitHub para rodar agora
 
 jobs:
