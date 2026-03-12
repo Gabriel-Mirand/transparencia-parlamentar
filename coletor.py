@@ -31,7 +31,7 @@ DB_CONFIG = {
     "sslmode": "require"
 }
 
-MAX_WORKERS = 2
+MAX_WORKERS = 5
 ATIVAR_AGENDAMENTO = False 
 
 # Logging configurado para aparecer no console do GitHub Actions
@@ -72,7 +72,7 @@ def obter_todos_deputados():
         params = {"ordem": "ASC", "ordenarPor": "nome", "itens": 100, "pagina": pagina}
         resposta = session.get(API_DEPUTADOS, params=params, timeout=(15, 60))
         
-        time.sleep(2)
+        time.sleep(1)
         
         # Verifica se a resposta foi bem sucedida
         if resposta.status_code != 200:
@@ -191,6 +191,7 @@ if __name__ == "__main__":
     lista_deputados = obter_todos_deputados()
     coletar_varios(lista_deputados)
     print("Processo concluído com sucesso!")
+
 
 
 
