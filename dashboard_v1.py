@@ -190,321 +190,138 @@ st.sidebar.markdown("---")
 st.sidebar.markdown("Dashboard Versão 1.0")
 
 # ==========================================================
+# 💰 RESUMO GERAL DO PERÍODO (VALOR TOTAL)
+# ==========================================================
+st.subheader("💰 Resumo do Período Selecionado")
+
+# Calcula o total apenas do que está filtrado no sidebar
+total_geral_periodo = df_filtrado["valor"].sum()
+qtd_lancamentos = len(df_filtrado)
+
+# Criamos duas colunas para o resumo
+col_total1, col_total2 = st.columns(2)
+
+with col_total1:
+    st.metric(
+        label="Gasto Total no Período", 
+        value=f"R$ {total_geral_periodo:,.2f}"
+    )
+
+with col_total2:
+    st.metric(
+        label="Quantidade de Lançamentos", 
+        value=f"{qtd_lancamentos:,}".replace(",", ".")
+    )
+
+st.divider()
+
+# ==========================================================
 # 🏆 PARTIDO CAMPEÃO DE GASTOS
 # ==========================================================
 st.subheader("🏆 Gastos por Partido")
 
-# Total gasto por partido
 total_partido = df.groupby("partido")["valor"].sum()
-
-# Número de deputados por partido
 deputados_partido = df.groupby("partido")["nome"].nunique()
 
-# Criar dataframe consolidado
 ranking_partido = pd.DataFrame({
     "total_gasto": total_partido,
     "qtd_deputados": deputados_partido
 }).reset_index()
 
-# Calcular média por deputado
 ranking_partido["media_por_deputado"] = (
     ranking_partido["total_gasto"] / ranking_partido["qtd_deputados"]
 )
 
-# ==========================================================
-# 📊 MÉDIA GERAL DE GASTO POR DEPUTADO (TODOS)
-# ==========================================================
+# Média Geral Nacional (calculada para a linha de referência)
+media_geral_deputados = df.groupby("nome")["valor"].sum().mean()
 
-media_individual = (
-    df.groupby("nome")["valor"]
-    .sum()
-)
+ranking_partido = ranking_partido.sort_values("total_gasto", ascending=False)
 
-media_geral_deputados = media_individual.mean()
-
-# Ordenar por total gasto
-ranking_partido = ranking_partido.sort_values(
-    "total_gasto",
-    ascending=False
-)
-
-# Gráfico de barras (Total)
+# Gráficos em colunas (No PC lado a lado, no Celular um sob o outro)
 fig_partido = px.bar(
-    ranking_partido,
-    x="partido",
-    y="total_gasto",
-    hover_data={
-        "qtd_deputados": True,
-        "media_por_deputado": ':.2f'
-    },
+    ranking_partido, x="partido", y="total_gasto",
+    hover_data={"qtd_deputados": True, "media_por_deputado": ':.2f'},
     title="Total de Gastos por Partido"
 )
-
 st.plotly_chart(fig_partido, use_container_width=True)
 
 fig_media = px.bar(
     ranking_partido.sort_values("media_por_deputado", ascending=False),
-    x="partido",
-    y="media_por_deputado",
-    title="Média de Gasto por Deputado em Cada Partido"
+    x="partido", y="media_por_deputado",
+    title="Média de Gasto por Deputado"
 )
-
-# Linha horizontal da média geral
-fig_media.add_hline(
-    y=media_geral_deputados,
-    line_dash="dash",
-    line_color="red",
-    annotation_text="Média Geral Nacional",
-    annotation_position="top right"
-)
-
+fig_media.add_hline(y=media_geral_deputados, line_dash="dash", line_color="red", annotation_text="Média Nacional")
 st.plotly_chart(fig_media, use_container_width=True)
 
-st.info(
-    f"📌 Média geral de gasto por deputado (todos os partidos): "
-    f"R$ {media_geral_deputados:,.2f}"
-)
-
+st.info(f"📌 Média nacional de gasto por deputado: R$ {media_geral_deputados:,.2f}")
 st.divider()
 
 # ==========================================================
-# 🥇 TOP 3 DEPUTADOS QUE MAIS GASTARAM
+# 🥇 TOP 3 DEPUTADOS (LAYOUT EM MÉTRICAS)
 # ==========================================================
 st.subheader("🥇 Top 3 Deputados que Mais Gastaram")
 
 ranking_deputados = (
     df.groupby(["nome", "partido"])["valor"]
-    .sum()
-    .sort_values(ascending=False)
-    .head(3)
-    .reset_index()
+    .sum().sort_values(ascending=False).head(3).reset_index()
 )
-
-medalhas = ["🥇", "🥈", "🥉"]
 
 if not ranking_deputados.empty:
+    m_cols = st.columns(3) # No celular, vira uma lista vertical automática
+    medalhas = ["🥇", "🥈", "🥉"]
     for i, row in ranking_deputados.iterrows():
-        st.markdown(
-            f"### {medalhas[i]} {row['nome']} ({row['partido']}) — R$ {row['valor']:,.2f}"
-        )
+        m_cols[i].metric(label=f"{medalhas[i]} {row['nome']}", 
+                         value=f"R$ {row['valor']:,.2f}", 
+                         delta=row['partido'], delta_color="off")
 else:
-    st.info("Não há dados suficientes para gerar o ranking.")
+    st.info("Sem dados suficientes.")
 
 st.divider()
 
 # ==========================================================
-# 📊 COMPARAÇÃO ENTRE DEPUTADOS
+# 📊 COMPARAÇÃO E DISTRIBUIÇÃO (POR DEPUTADO SELECIONADO)
 # ==========================================================
-st.subheader("📊 Comparação Entre Deputados")
+st.subheader("📊 Análise dos Deputados Selecionados")
 
-comparacao = (
-    df_filtrado.groupby("deputado_partido")["valor"]
-    .sum()
-    .reset_index()
-)
+comparacao = df_filtrado.groupby("deputado_partido")["valor"].sum().reset_index()
 
-fig_comp = px.bar(
-    comparacao,
-    x="deputado_partido",
-    y="valor",
-    title="Total Gasto por Deputado"
-)
-
+fig_comp = px.bar(comparacao, x="deputado_partido", y="valor", title="Comparativo de Gastos")
 st.plotly_chart(fig_comp, use_container_width=True)
 
-# ----------------------------------------------------------
-# Mostrar valores por escrito
-# ----------------------------------------------------------
-st.markdown("### 💰 Valor Total Gasto por Deputado")
-
-for _, row in comparacao.iterrows():
-    deputado = row["deputado_partido"]
-    valor = row["valor"]
-
-    st.write(f"**{deputado}** gastou **R$ {valor:,.2f}** no período selecionado.")
-
-st.divider()
-
-# ==========================================================
-# 📊 GASTOS POR TIPO PARA CADA DEPUTADO
-# ==========================================================
-st.subheader("🧾 Distribuição de Gastos por Tipo (por Deputado)")
-
+# Gastos por Tipo (Pie Charts)
 for deputado in df_filtrado["deputado_partido"].unique():
-
-    st.markdown(f"### {deputado}")
-
-    df_dep = df_filtrado[df_filtrado["deputado_partido"] == deputado]
-
-    gasto_tipo = (
-        df_dep.groupby("descricao")["valor"]
-        .sum()
-        .reset_index()
-    )
-
-    total_gastos = gasto_tipo["valor"].sum()
-
-    # calcular percentual
-    gasto_tipo["percentual"] = (gasto_tipo["valor"] / total_gastos) * 100
-
-    # separar maiores de 2%
-    maiores = gasto_tipo[gasto_tipo["percentual"] >= 2]
-
-    # menores que 2%
-    menores = gasto_tipo[gasto_tipo["percentual"] < 2]
-
-    if not menores.empty:
-        outros_valor = menores["valor"].sum()
-
-        maiores = pd.concat([
-            maiores,
-            pd.DataFrame([{
-                "descricao": "Outros",
-                "valor": outros_valor,
-                "percentual": (outros_valor / total_gastos) * 100
-            }])
-        ])
-
-    fig_tipo = px.pie(
-        maiores,
-        names="descricao",
-        values="valor",
-        title=f"Distribuição de gastos — {deputado}"
-    )
-
-    st.plotly_chart(fig_tipo, use_container_width=True)
-
-st.markdown(
-    "💡 Tipos de gasto com menos de 2% do total foram agrupados como 'Outros'."
-)
+    with st.expander(f"🔍 Ver detalhes de: {deputado}"):
+        df_dep = df_filtrado[df_filtrado["deputado_partido"] == deputado]
+        gasto_tipo = df_dep.groupby("descricao")["valor"].sum().reset_index()
+        
+        # Agrupar menores que 2%
+        total_dep = gasto_tipo["valor"].sum()
+        gasto_tipo["pct"] = (gasto_tipo["valor"] / total_dep) * 100
+        maiores = gasto_tipo[gasto_tipo["pct"] >= 2]
+        outros_val = gasto_tipo[gasto_tipo["pct"] < 2]["valor"].sum()
+        
+        if outros_val > 0:
+            maiores = pd.concat([maiores, pd.DataFrame([{"descricao": "Outros", "valor": outros_val}])])
+        
+        fig_pie = px.pie(maiores, names="descricao", values="valor", title=f"Distribuição: {deputado}")
+        st.plotly_chart(fig_pie, use_container_width=True)
 
 st.divider()
 
 # ==========================================================
-# 📈 EVOLUÇÃO MENSAL
-# ==========================================================
-st.subheader("📈 Evolução Mensal")
-
-mensal = (
-    df_filtrado.groupby(["mes", "deputado_partido"])["valor"]
-    .sum()
-    .reset_index()
-)
-
-fig_linha = px.line(
-    mensal,
-    x="mes",
-    y="valor",
-    color="deputado_partido",
-    markers=True,
-    title="Gastos ao longo do tempo"
-)
-
-st.plotly_chart(fig_linha, use_container_width=True)
-
-st.divider()
-
-# ==========================================================
-# ⚠️ GASTOS MUITO ACIMA DA MÉDIA (BASE COMPLETA)
-# ==========================================================
-st.subheader("⚠️ Gastos Muito Acima da Média")
-
-# 🔹 Média considerando TODOS os gastos da base
-media_geral = df["valor"].mean()
-
-# Definição de muito acima da média (5x)
-limite = media_geral * 5
-
-st.markdown(
-    f"📊 Média geral considerando TODOS os gastos da base: "
-    f"**R$ {media_geral:,.2f}**"
-)
-
-st.markdown(
-    f"🔎 Consideramos como 'muito acima da média' valores superiores a "
-    f"**R$ {limite:,.2f}** (5x a média geral)."
-)
-
-# Agora filtramos apenas dentro do que está sendo exibido
-acima_media = df_filtrado[df_filtrado["valor"] > limite]
-
-if not acima_media.empty:
-
-    st.warning(
-        f"Foram encontrados {len(acima_media)} gastos muito acima da média."
-    )
-
-    st.dataframe(
-        acima_media[
-            ["nome", "partido", "data", "valor", "descricao"]
-        ].sort_values("valor", ascending=False)
-    )
-
-else:
-    st.success("Nenhum gasto muito acima da média foi encontrado.")
-
-st.divider()
-
-# ==========================================================
-# 🏆 RANKING DE DEPUTADOS COM MAIS GASTOS ACIMA DA MÉDIA
-# ==========================================================
-
-st.subheader("🏆 Ranking de Deputados com Mais Gastos Acima da Média")
-
-if not acima_media.empty:
-
-    ranking_acima = (
-        acima_media
-        .groupby(["nome", "partido"])
-        .agg(
-            qtd_ocorrencias=("valor", "count"),
-            total_acima=("valor", "sum")
-        )
-        .reset_index()
-        .sort_values(by="qtd_ocorrencias", ascending=False)
-    )
-
-    medalhas = ["🥇", "🥈", "🥉"]
-
-    # Mostrar Top 3 com medalhas
-    for posicao, (_, row) in enumerate(ranking_acima.head(3).iterrows()):
-        medalha = medalhas[posicao] if posicao < 3 else ""
-
-        st.markdown(
-            f"{medalha} **{row['nome']} ({row['partido']})**  \n"
-            f"- Ocorrências acima da média: {row['qtd_ocorrencias']}  \n"
-            f"- Total gasto acima da média: R$ {row['total_acima']:,.2f}"
-        )
-
-    st.markdown("---")
-    st.dataframe(ranking_acima)
-
-else:
-    st.info("Nenhum deputado possui gastos acima da média para gerar ranking.")
-
-st.divider()
-
-# ==========================================================
-# 📄 TABELA FINAL
+# 📄 TABELA FINAL FORMATADA (MUITO MELHOR NO CELULAR)
 # ==========================================================
 st.subheader("📄 Lista Completa de Gastos")
 
-# Lista apenas as colunas amigáveis para o usuário ver
-colunas_visiveis = ["data", "nome", "partido", "valor", "descricao"]
-
 st.dataframe(
-    df_filtrado[colunas_visiveis].sort_values("data", ascending=False),
+    df_filtrado[["data", "nome", "partido", "valor", "descricao"]].sort_values("data", ascending=False),
     use_container_width=True,
-    hide_index=True # Remove a coluna de números à esquerda, economizando espaço no celular
+    hide_index=True,
+    column_config={
+        "data": st.column_config.DateColumn("Data", format="DD/MM/YYYY"),
+        "valor": st.column_config.NumberColumn("Valor", format="R$ %.2f"),
+        "nome": "Deputado",
+        "descricao": "Descrição"
+    }
 )
-
-
-
-
-
-
-
-
-
-
 
