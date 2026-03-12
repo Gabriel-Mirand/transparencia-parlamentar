@@ -43,10 +43,12 @@ try:
         df["data"] = pd.to_datetime(df["data"])
         df["valor"] = pd.to_numeric(df["valor"])
         df["deputado_partido"] = df["nome"] + " (" + df["partido"] + ")"
-        
-        # --- COLE ESTA LINHA AQUI (ANTES DA LINHA 55) ---
-        df["mes_ano"] = df["data"].dt.to_period("M").astype(str)
-        # -----------------------------------------------
+    
+        #LINHA PARA SALVAR O GRÁFICO DE EVOLUÇÃO:
+        df["mes"] = df["data"].dt.to_period("M").astype(str)
+    
+        # (Pode manter a 'mes_ano' também se os filtros usarem ela)
+        df["mes_ano"] = df["mes"] 
 
     else:
         st.warning("O banco de dados parece estar vazio.")
@@ -492,6 +494,7 @@ st.dataframe(
     use_container_width=True
 
 )
+
 
 
 
