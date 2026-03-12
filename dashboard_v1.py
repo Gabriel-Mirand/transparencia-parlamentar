@@ -3,7 +3,6 @@
 # ==========================================================
 import streamlit as st
 import pandas as pd
-import psycopg2
 import plotly.express as px
 import numpy as np
 import os
@@ -18,15 +17,20 @@ st.title("📊 Transparência de Gastos Parlamentares")
 st.markdown("Como o seu deputado tem gasto a cota parlamentar?")
 
 # ==========================================================
-# CONFIGURAÇÃO DO BANCO (REMOVIDO DB_CONFIG ANTIGO)
+# FUNÇÃO PARA CARREGAR DADOS (VERSÃO FINAL)
 # ==========================================================
-
-# Use diretamente a função carregar_dados abaixo:
-
 @st.cache_data(ttl=600)
 def carregar_dados():
-    # O Streamlit busca as credenciais sozinho nos Secrets [connections.postgresql]
-    conn = st.connection("postgresql", type="sql")
+    # O Streamlit busca as credenciais nos Secrets [connections.postgresql]
+    # connect_args resolvem o conflito com o Pooler e SSL do Supabase
+    conn = st.connection(
+        "postgresql", 
+        type="sql",
+        connect_args={
+            "sslmode": "require", 
+            "prepare_threshold": 0
+        }
+    )
 
     query = """
         SELECT 
@@ -42,10 +46,10 @@ def carregar_dados():
     # O método .query() já retorna um DataFrame do Pandas
     return conn.query(query)
 
-# Chame a função e trate os dados logo em seguida
+# Chame a função para popular o DF
 df = carregar_dados()
 
-# Tratamento essencial para o restante do código funcionar
+# Mantenha os tratamentos de colunas logo abaixo
 df["data"] = pd.to_datetime(df["data"])
 df["valor"] = pd.to_numeric(df["valor"])
 df["deputado_partido"] = df["nome"] + " (" + df["partido"] + ")"
@@ -477,6 +481,7 @@ st.dataframe(
     use_container_width=True
 
 )
+
 
 
 
