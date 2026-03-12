@@ -19,160 +19,105 @@ st.markdown("Como o seu deputado tem gasto a cota parlamentar?")
 st.markdown("Os gráficos abaixo apresentam uma visão geral dos gastos parlamentares. Para realizar comparativos e visualizar detalhes específicos, selecione os deputados na barra lateral.")
 
 # ==========================================================
-# CARREGAMENTO DE DADOS (VERSÃO LIMPA)
+# CARREGAMENTO E TRATAMENTO (SÓ RODA UMA VEZ)
 # ==========================================================
 
-@st.cache_data(ttl=600)
-def carregar_dados():
-    # O Streamlit busca a 'url' nos Secrets [connections.postgresql] automaticamente
-    # Ele NÃO precisa de int() ou os.getenv aqui
-    conn = st.connection("postgresql", type="sql")
-    
-    query = """
-        SELECT d.nome, d.partido, g.data, g.valor, g.descricao
-        FROM gastos g
-        JOIN deputados d ON g.deputado_id = d.deputado_id
-    """
-    return conn.query(query)
-
-# --- EXECUÇÃO SEGURA ---
 try:
     df = carregar_dados()
-    # Cria um mapeamento de cores fixo para todas as descrições da base
-    todas_descricoes = sorted(df["descricao"].unique())
-    cores_disponiveis = px.colors.qualitative.Alphabet # Paleta com 26 cores diferentes
-
-    # Dicionário que liga cada tipo de gasto a uma cor específica
-    mapa_cores_fixo = {desc: cores_disponiveis[i % len(cores_disponiveis)] for i, desc in enumerate(todas_descricoes)}
-    mapa_cores_fixo["Outros"] = "#808080" # Força o cinza para o grupo "Outros"
-
-    # Só faz o tratamento se o df foi criado com sucesso
-    if df is not None and not df.empty:
-        df["data"] = pd.to_datetime(df["data"])
-        df["valor"] = pd.to_numeric(df["valor"])
-        df["deputado_partido"] = df["nome"] + " (" + df["partido"] + ")"
     
-        #LINHA PARA SALVAR O GRÁFICO DE EVOLUÇÃO:
-        df["mes"] = df["data"].dt.to_period("M").astype(str)
+    # --- TRATAMENTO INICIAL (Essencial para os filtros de tempo) ---
+    df["data"] = pd.to_datetime(df["data"])
+    df["valor"] = pd.to_numeric(df["valor"])
+    df["mes_ano"] = df["data"].dt.to_period("M").astype(str)
+    df["deputado_partido"] = df["nome"] + " (" + df["partido"] + ")"
+
+    # ==========================================================
+    # SIDEBAR - FILTRO DE TEMPO (O ÚNICO QUE AFETA A INTRODUÇÃO)
+    # ==========================================================
+    st.sidebar.header("📅 Período de Análise")
+    periodos = sorted(df["mes_ano"].unique())
+    periodo_inicio = st.sidebar.selectbox("Início", periodos, index=0)
+    periodo_fim = st.sidebar.selectbox("Fim", periodos, index=len(periodos)-1)
+
+    # Base da Câmara filtrada APENAS pelo tempo
+    df_camera_total = df[(df["mes_ano"] >= periodo_inicio) & (df["mes_ano"] <= periodo_fim)]
+
+    # ==========================================================
+    # 🏛️ 1. GASTO TOTAL DA CÂMARA (APARECE DE CARA)
+    # ==========================================================
+    st.header("🏛️ Visão Geral da Câmara")
     
-        # (Pode manter a 'mes_ano' também se os filtros usarem ela)
-        df["mes_ano"] = df["mes"] 
-
-    else:
-        st.warning("O banco de dados parece estar vazio.")
-        st.stop()
-
-except Exception as e:
-    st.error(f"Erro de conexão: {e}")
-
-    #====================================================
-    #VISÃO GERAL
-    #====================================================
-    # ==========================================================
-    # 🏛️ GASTO TOTAL DA CÂMARA (APENAS FILTRO DE TEMPO)
-    # ==========================================================
-    st.subheader("🏛️ Gasto Total da Câmara no Período")
-
-    # Filtramos a base completa apenas pelo tempo selecionado no sidebar
-    df_camera_total = df[
-        (df["mes_ano"] >= periodo_inicio) & 
-        (df["mes_ano"] <= periodo_fim)
-    ]
-
     total_camera = df_camera_total["valor"].sum()
-    qtd_total_docs = len(df_camera_total)
-
-    col_cam1, col_cam2 = st.columns(2)
-
-    with col_cam1:
-        st.metric(
-            label="Total Gasto pela Câmara", 
-            value=f"R$ {total_camera:,.2f}"
-        )
-
-    with col_cam2:
-        st.metric(
-            label="Total de Notas Fiscais", 
-            value=f"{qtd_total_docs:,}".replace(",", ".")
-        )
-
-    st.caption(f"📊 Valores baseados em todos os deputados entre {periodo_inicio} e {periodo_fim}.")
+    qtd_notas = len(df_camera_total)
+    
+    c1, c2 = st.columns(2)
+    c1.metric("Total Gasto pela Câmara", f"R$ {total_camera:,.2f}")
+    c2.metric("Total de Notas Fiscais", f"{qtd_notas:,}".replace(",", "."))
+    
     st.divider()
 
     # ==========================================================
-    # 🏆 PARTIDO CAMPEÃO DE GASTOS
+    # 🏆 2. PARTIDO CAMPEÃO E MÉDIAS (APARECE DE CARA)
     # ==========================================================
     st.subheader("🏆 Gastos por Partido")
-
-    total_partido = df.groupby("partido")["valor"].sum()
-    deputados_partido = df.groupby("partido")["nome"].nunique()
-
-    ranking_partido = pd.DataFrame({
-        "total_gasto": total_partido,
-        "qtd_deputados": deputados_partido
-    }).reset_index()
-
-    ranking_partido["media_por_deputado"] = (
-        ranking_partido["total_gasto"] / ranking_partido["qtd_deputados"]
-    )
-
-    # Média Geral Nacional (calculada para a linha de referência)
-    media_geral_deputados = df.groupby("nome")["valor"].sum().mean()
-
-    ranking_partido = ranking_partido.sort_values("total_gasto", ascending=False)
-
-    # Gráficos em colunas (No PC lado a lado, no Celular um sob o outro)
-    fig_partido = px.bar(
-        ranking_partido, x="partido", y="total_gasto",
-        hover_data={"qtd_deputados": True, "media_por_deputado": ':.2f'},
-        title="Total de Gastos por Partido"
-    )
-    st.plotly_chart(fig_partido, use_container_width=True)
-
-    fig_media = px.bar(
-        ranking_partido.sort_values("media_por_deputado", ascending=False),
-        x="partido", y="media_por_deputado",
-        title="Média de Gasto por Deputado"
-    )
-    fig_media.add_hline(y=media_geral_deputados, line_dash="dash", line_color="red", annotation_text="Média Nacional")
-    st.plotly_chart(fig_media, use_container_width=True)
-
-    st.info(f"📌 Média nacional de gasto por deputado: R$ {media_geral_deputados:,.2f}")
-    st.divider()
-
-    # ==========================================================
-    # 🥇 TOP 3 DEPUTADOS (LAYOUT EM MÉTRICAS)
-    # ==========================================================
-    st.subheader("🥇 Top 3 Deputados que Mais Gastaram")
-
-    ranking_deputados = (
-        df.groupby(["nome", "partido"])["valor"]
-        .sum().sort_values(ascending=False).head(3).reset_index()
-    )
-
-    if not ranking_deputados.empty:
-        m_cols = st.columns(3) # No celular, vira uma lista vertical automática
-        medalhas = ["🥇", "🥈", "🥉"]
-        for i, row in ranking_deputados.iterrows():
-            m_cols[i].metric(label=f"{medalhas[i]} {row['nome']}", 
-                         value=f"R$ {row['valor']:,.2f}", 
-                         delta=row['partido'], delta_color="off")
-    else:
-        st.info("Sem dados suficientes.")
-
-    st.divider()
-
     
-    st.stop()
+    # Cálculos por Partido
+    total_partido = df_camera_total.groupby("partido")["valor"].sum()
+    deps_partido = df_camera_total.groupby("partido")["nome"].nunique()
+    
+    ranking_p = pd.DataFrame({"total": total_partido, "deps": deps_partido}).reset_index()
+    ranking_p["media"] = ranking_p["total"] / ranking_p["deps"]
+    ranking_p = ranking_p.sort_values("total", ascending=False)
 
-# --- AQUI COMEÇA O SEU CÓDIGO ORIGINAL (SIDEBAR, FILTROS, ETC.) ---
-# A partir daqui seu código já vai encontrar a coluna 'mes_ano' pronta.
+    fig_p = px.bar(ranking_p, x="partido", y="total", title="Total por Partido", color="partido")
+    st.plotly_chart(fig_p, use_container_width=True)
 
+    fig_m = px.bar(ranking_p.sort_values("media", ascending=False), x="partido", y="media", 
+                   title="Média de Gasto por Deputado no Partido", color_discrete_sequence=['#FFA500'])
+    st.plotly_chart(fig_m, use_container_width=True)
+
+    st.divider()
+
+    # ==========================================================
+    # 🥇 3. TOP 3 DEPUTADOS NACIONAL (APARECE DE CARA)
+    # ==========================================================
+    st.subheader("🥇 Top 3 Deputados que Mais Gastaram (Nacional)")
+    
+    top3 = df_camera_total.groupby(["nome", "partido"])["valor"].sum().sort_values(ascending=False).head(3).reset_index()
+    
+    cols_t3 = st.columns(3)
+    meds = ["🥇", "🥈", "🥉"]
+    for i, row in top3.iterrows():
+        cols_t3[i].metric(label=f"{meds[i]} {row['nome']}", 
+                          value=f"R$ {row['valor']:,.2f}", 
+                          delta=row['partido'], delta_color="off")
+
+    st.divider()
+
+    # ==========================================================
+    # 🛑 MENSAGEM DE INSTRUÇÃO E PONTO DE PARADA
+    # ==========================================================
+    st.info("💡 **Aprofunde sua busca:** Os dados acima são gerais da Câmara. Use o menu lateral para selecionar deputados e ver detalhes individuais, evolução e notas fiscais.")
+
+    # Filtro de Deputados na Sidebar
+    deputados_sel = st.sidebar.multiselect(
+        "Selecione Deputados para Detalhar:", 
+        options=sorted(df_camera_total["deputado_partido"].unique())
+    )
+
+    if not deputados_sel:
+        st.stop() # O dashboard para aqui se ninguém for selecionado
+
+    # ==========================================================
+    # 📊 4. DETALHAMENTO INDIVIDUAL (SÓ RODA SE SELECIONAR)
+    # ==========================================================
+    df_filtrado = df_camera_total[df_camera_total["deputado_partido"].isin(deputados_sel)]
+    
+    # ... (Aqui você coloca os blocos de Evolução Mensal, Distribuição e Tabela Final) ...
 
 except Exception as e:
-    st.error(f"Erro de conexão: {e}")
-    st.info("Verifique se a 'url' nos Secrets do Streamlit está correta.")
-    st.stop() # Evita o NameError nas linhas abaixo
+    st.error(f"Erro ao carregar dashboard: {e}")
+    st.stop()
 
 # ==========================================================
 # SIDEBAR — FILTROS
@@ -466,6 +411,7 @@ st.dataframe(
         "descricao": "Descrição"
     }
 )
+
 
 
 
