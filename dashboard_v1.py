@@ -16,6 +16,7 @@ st.set_page_config(page_title="Transparência Parlamentar", layout="wide")
 
 st.title("📊 Transparência de Gastos Parlamentares")
 st.markdown("Como o seu deputado tem gasto a cota parlamentar?")
+st.markdown("Os gráficos abaixo apresentam uma visão geral dos gastos parlamentares. Para realizar comparativos e visualizar detalhes específicos, selecione os deputados na barra lateral.")
 
 # ==========================================================
 # CARREGAMENTO DE DADOS (VERSÃO LIMPA)
@@ -465,6 +466,7 @@ st.dataframe(
         "descricao": "Descrição"
     }
 )
+
 
 
 
