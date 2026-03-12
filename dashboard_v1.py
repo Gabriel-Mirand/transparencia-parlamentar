@@ -190,29 +190,34 @@ st.sidebar.markdown("---")
 st.sidebar.markdown("Dashboard Versão 1.0")
 
 # ==========================================================
-# 💰 RESUMO GERAL DO PERÍODO (VALOR TOTAL)
+# 🏛️ GASTO TOTAL DA CÂMARA (APENAS FILTRO DE TEMPO)
 # ==========================================================
-st.subheader("💰 Resumo do Período Selecionado")
+st.subheader("🏛️ Gasto Total da Câmara no Período")
 
-# Calcula o total apenas do que está filtrado no sidebar
-total_geral_periodo = df_filtrado["valor"].sum()
-qtd_lancamentos = len(df_filtrado)
+# Filtramos a base completa apenas pelo tempo selecionado no sidebar
+df_camera_total = df[
+    (df["mes_ano"] >= periodo_inicio) & 
+    (df["mes_ano"] <= periodo_fim)
+]
 
-# Criamos duas colunas para o resumo
-col_total1, col_total2 = st.columns(2)
+total_camera = df_camera_total["valor"].sum()
+qtd_total_docs = len(df_camera_total)
 
-with col_total1:
+col_cam1, col_cam2 = st.columns(2)
+
+with col_cam1:
     st.metric(
-        label="Gasto Total no Período", 
-        value=f"R$ {total_geral_periodo:,.2f}"
+        label="Total Gasto pela Câmara", 
+        value=f"R$ {total_camera:,.2f}"
     )
 
-with col_total2:
+with col_cam2:
     st.metric(
-        label="Quantidade de Lançamentos", 
-        value=f"{qtd_lancamentos:,}".replace(",", ".")
+        label="Total de Notas Fiscais", 
+        value=f"{qtd_total_docs:,}".replace(",", ".")
     )
 
+st.caption(f"📊 Valores baseados em todos os deputados entre {periodo_inicio} e {periodo_fim}.")
 st.divider()
 
 # ==========================================================
@@ -324,4 +329,5 @@ st.dataframe(
         "descricao": "Descrição"
     }
 )
+
 
