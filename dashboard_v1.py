@@ -1,31 +1,25 @@
-# ==========================================================
-# IMPORTS
-# ==========================================================
 import streamlit as st
 import pandas as pd
-import psycopg2
 import plotly.express as px
-import numpy as np
 import os
 from dotenv import load_dotenv
 
 # ==========================================================
-# CONFIGURAÇÃO DA PÁGINA
+# CONFIGURAÇÃO DA PÁGINA (OTIMIZAÇÃO MOBILE)
 # ==========================================================
-st.set_page_config(page_title="Transparência Parlamentar", layout="wide")
+st.set_page_config(
+    page_title="Transparência Parlamentar", 
+    layout="wide", 
+    initial_sidebar_state="collapsed"
+)
 
-st.title("📊 Transparência de Gastos Parlamentares")
-st.markdown("Como o seu deputado tem gasto a cota parlamentar?")
-st.markdown("Os gráficos abaixo apresentam uma visão geral dos gastos parlamentares. Para realizar comparativos e visualizar detalhes específicos, selecione os deputados na barra lateral.")
-#==================================================
 # ==========================================================
-# FUNÇÃO PARA CARREGAR DADOS (RESTAURADA)
+# 1. FUNÇÃO DE CARREGAMENTO (VIA SECRETS STREAMLIT)
 # ==========================================================
 @st.cache_data(ttl=600)
 def carregar_dados():
-    # O Streamlit busca a 'url' nos Secrets [connections.postgresql] automaticamente
+    # O Streamlit busca a 'url' nos Secrets [connections.postgresql]
     conn = st.connection("postgresql", type="sql")
-    
     query = """
         SELECT d.nome, d.partido, g.data, g.valor, g.descricao, d.deputado_id
         FROM gastos g
@@ -33,19 +27,128 @@ def carregar_dados():
     """
     return conn.query(query)
 
-# --- EXECUÇÃO DO CARREGAMENTO ---
+# ==========================================================
+# 2. EXECUÇÃO E TRATAMENTO
+# ==========================================================
 try:
-    df = carregar_dados()
+    df_raw = carregar_dados()
+    df = df_raw.copy()
     
-    # Tratamentos essenciais para o seu código antigo funcionar
+    # Tratamento de Tipos e Colunas Extras
     df["data"] = pd.to_datetime(df["data"])
     df["valor"] = pd.to_numeric(df["valor"])
-    df["deputado_partido"] = df["nome"] + " (" + df["partido"] + ")"
     df["mes_ano"] = df["data"].dt.to_period("M").astype(str)
     df["mes"] = df["mes_ano"]
+    df["deputado_partido"] = df["nome"] + " (" + df["partido"] + ")"
+
+    # Mapa de Cores Fixo (Consistência Visual)
+    todas_descricoes = sorted(df["descricao"].unique())
+    cores_disponiveis = px.colors.qualitative.Alphabet
+    mapa_cores_fixo = {desc: cores_disponiveis[i % len(cores_disponiveis)] for i, desc in enumerate(todas_descricoes)}
+    mapa_cores_fixo["Outros"] = "#808080"
+
+    # ==========================================================
+    # 🏛️ SEÇÃO: PANORAMA GERAL DA CÂMARA (APARECE DE CARA)
+    # ==========================================================
+    st.title("📊 Transparência de Gastos Parlamentares")
+    st.info("💡 **Visão Geral:** Os indicadores abaixo refletem a totalidade da base. Use o menu lateral para filtrar períodos ou detalhar deputados.")
+
+    # 1. MÉTRICAS TOTAIS (RESPONSIVO)
+    total_geral = df["valor"].sum()
+    c1, c2 = st.columns(2)
+    c1.metric("Total Gasto (Câmara)", f"R$ {total_geral:,.2f}")
+    c2.metric("Notas Fiscais Processadas", f"{len(df):,}".replace(",", "."))
+
+    st.divider()
+
+    # 2. GASTOS POR PARTIDO (TOTAL E MÉDIA)
+    st.subheader("🏆 Gastos por Partido (Consolidado)")
+    
+    total_p = df.groupby("partido")["valor"].sum().sort_values(ascending=False).reset_index()
+    deps_p = df.groupby("partido")["nome"].nunique()
+    ranking_p = total_p.merge(pd.DataFrame(deps_p).reset_index(), on="partido")
+    ranking_p.columns = ["partido", "total", "deps"]
+    ranking_p["media"] = ranking_p["total"] / ranking_p["deps"]
+
+    fig_p_total = px.bar(ranking_p, x="partido", y="total", title="Total por Partido", color="partido")
+    st.plotly_chart(fig_p_total, use_container_width=True)
+
+    media_nacional = df.groupby("nome")["valor"].sum().mean()
+    fig_p_media = px.bar(ranking_p.sort_values("media", ascending=False), x="partido", y="media", 
+                         title="Média de Gasto por Deputado no Partido", color_discrete_sequence=['#FFA500'])
+    fig_p_media.add_hline(y=media_nacional, line_dash="dash", line_color="red", annotation_text="Média Nacional")
+    st.plotly_chart(fig_p_media, use_container_width=True)
+
+    st.divider()
+
+    # 3. TOP 3 DEPUTADOS NACIONAL
+    st.subheader("🥇 Top 3 Deputados que Mais Gastaram (Geral)")
+    top3 = df.groupby(["nome", "partido"])["valor"].sum().sort_values(ascending=False).head(3).reset_index()
+    
+    cols_t3 = st.columns(3)
+    meds = ["🥇", "🥈", "🥉"]
+    for i, row in top3.iterrows():
+        cols_t3[i].metric(label=f"{meds[i]} {row['nome']}", 
+                          value=f"R$ {row['valor']:,.2f}", 
+                          delta=row['partido'], delta_color="off")
+
+    st.divider()
+
+    # ==========================================================
+    # 👤 FILTROS DE DETALHAMENTO (LATERAL)
+    # ==========================================================
+    st.sidebar.header("🔍 Detalhar Pesquisa")
+    
+    # Filtro de Período (Afeta o que vem abaixo)
+    periodos = sorted(df["mes_ano"].unique())
+    p_inicio = st.sidebar.selectbox("Mês Inicial", periodos, index=0)
+    p_fim = st.sidebar.selectbox("Mês Final", periodos, index=len(periodos)-1)
+
+    # Filtro de Deputados
+    deputados_sel = st.sidebar.multiselect(
+        "Selecione Deputados para Detalhar:", 
+        options=sorted(df["deputado_partido"].unique())
+    )
+
+    if not deputados_sel:
+        st.warning("👈 **Ação sugerida:** Selecione um ou mais deputados na barra lateral para ver a evolução mensal e a lista de notas fiscais.")
+        st.stop()
+
+    # ==========================================================
+    # 📊 SEÇÃO: DETALHAMENTO INDIVIDUAL (SÓ RODA SE SELECIONAR)
+    # ==========================================================
+    df_filtrado = df[
+        (df["mes_ano"] >= p_inicio) & 
+        (df["mes_ano"] <= p_fim) & 
+        (df["deputado_partido"].isin(deputados_sel))
+    ]
+
+    st.subheader("📈 Evolução Mensal dos Selecionados")
+    mensal = df_filtrado.groupby(["mes", "deputado_partido"])["valor"].sum().reset_index()
+    fig_l = px.line(mensal, x="mes", y="valor", color="deputado_partido", markers=True)
+    st.plotly_chart(fig_l, use_container_width=True)
+
+    st.subheader("🧾 Distribuição por Tipo de Gasto")
+    for deputado in deputados_sel:
+        with st.expander(f"🔍 Ver tipos de gastos: {deputado}"):
+            df_dep = df_filtrado[df_filtrado["deputado_partido"] == deputado]
+            gasto_tipo = df_dep.groupby("descricao")["valor"].sum().reset_index()
+            fig_pie = px.pie(gasto_tipo, names="descricao", values="valor", 
+                             color="descricao", color_discrete_map=mapa_cores_fixo)
+            st.plotly_chart(fig_pie, use_container_width=True)
+
+    st.subheader("📄 Lista de Notas Fiscais (Filtrada)")
+    st.dataframe(
+        df_filtrado[["data", "nome", "partido", "valor", "descricao"]].sort_values("data", ascending=False),
+        use_container_width=True, hide_index=True,
+        column_config={
+            "data": st.column_config.DateColumn("Data", format="DD/MM/YYYY"), 
+            "valor": st.column_config.NumberColumn("Valor", format="R$ %.2f")
+        }
+    )
 
 except Exception as e:
-    st.error(f"Erro ao carregar dados do banco: {e}")
+    st.error(f"Erro ao carregar dashboard: {e}")
     st.stop()
 
 # ==========================================================
@@ -443,6 +546,7 @@ st.dataframe(
         "descricao": "Descrição"
     }
 )
+
 
 
 
