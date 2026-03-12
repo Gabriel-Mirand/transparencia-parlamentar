@@ -18,13 +18,15 @@ st.title("📊 Transparência de Gastos Parlamentares")
 st.markdown("Como o seu deputado tem gasto a cota parlamentar?")
 
 # ==========================================================
-# FUNÇÃO PARA CARREGAR DADOS (VERSÃO SIMPLIFICADA)
+# CARREGAMENTO DE DADOS (VERSÃO LIMPA)
 # ==========================================================
 
 @st.cache_data(ttl=600)
 def carregar_dados():
-    # O Streamlit lê a 'url' limpa do Secret
+    # O Streamlit busca a 'url' nos Secrets [connections.postgresql] automaticamente
+    # Ele NÃO precisa de int() ou os.getenv aqui
     conn = st.connection("postgresql", type="sql")
+    
     query = """
         SELECT d.nome, d.partido, g.data, g.valor, g.descricao
         FROM gastos g
@@ -36,15 +38,32 @@ def carregar_dados():
 try:
     df = carregar_dados()
     
-    # Tratamento (Só roda se o df existir)
-    df["data"] = pd.to_datetime(df["data"])
-    df["valor"] = pd.to_numeric(df["valor"])
-    df["deputado_partido"] = df["nome"] + " (" + df["partido"] + ")"
+    # Só faz o tratamento se o df foi criado com sucesso
+    if df is not None and not df.empty:
+        df["data"] = pd.to_datetime(df["data"])
+        df["valor"] = pd.to_numeric(df["valor"])
+        df["deputado_partido"] = df["nome"] + " (" + df["partido"] + ")"
+        
+        # --- COLE ESTA LINHA AQUI (ANTES DA LINHA 55) ---
+        df["mes_ano"] = df["data"].dt.to_period("M").astype(str)
+        # -----------------------------------------------
+
+    else:
+        st.warning("O banco de dados parece estar vazio.")
+        st.stop()
 
 except Exception as e:
-    st.error(f"Erro ao conectar ao banco: {e}")
-    st.stop() # Para o app aqui se der erro, evitando o NameError abaixo
+    st.error(f"Erro de conexão: {e}")
+    st.stop()
 
+# --- AQUI COMEÇA O SEU CÓDIGO ORIGINAL (SIDEBAR, FILTROS, ETC.) ---
+# A partir daqui seu código já vai encontrar a coluna 'mes_ano' pronta.
+
+
+except Exception as e:
+    st.error(f"Erro de conexão: {e}")
+    st.info("Verifique se a 'url' nos Secrets do Streamlit está correta.")
+    st.stop() # Evita o NameError nas linhas abaixo
 
 # ==========================================================
 # SIDEBAR — FILTROS
@@ -473,6 +492,7 @@ st.dataframe(
     use_container_width=True
 
 )
+
 
 
 
