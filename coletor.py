@@ -158,7 +158,8 @@ def coletar_deputado(dep_dict):
             if not dados: break
 
             if ultima_data:
-                dados = [item for item in dados if datetime.strptime(item.get("dataDocumento"), "%Y-%m-%d").date() > ultima_data]
+                # Usamos [:10] para pegar apenas o YYYY-MM-DD e ignorar a hora (T00:00:00)
+                dados = [item for item in dados if item.get("dataDocumento") and datetime.strptime(item.get("dataDocumento")[:10], "%Y-%m-%d").date() > ultima_data]
             
             if not dados: break
             salvar_gastos(cursor, dep_id, dados)
@@ -191,13 +192,6 @@ if __name__ == "__main__":
     lista_deputados = obter_todos_deputados()
     coletar_varios(lista_deputados)
     print("Processo concluído com sucesso!")
-
-
-
-
-
-
-
 
 
 
