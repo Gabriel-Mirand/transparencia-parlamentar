@@ -123,68 +123,91 @@ deputados_disp = sorted(df_filtrado_partido["deputado_partido"].unique())
 deputados_sel = st.sidebar.multiselect("Selecione até 5 deputados", deputados_disp, max_selections=5)
 
 # ==========================================================
-# 🔗 FONTE DOS DADOS
+# 🔗 FONTE DOS DADOS (Sempre visível na Sidebar)
 # ==========================================================
 st.sidebar.markdown("---")
 st.sidebar.markdown("### 🔎 Fonte dos Dados")
-
 st.sidebar.markdown(
     """
     Dados coletados da API oficial da  
     [Câmara dos Deputados](https://dadosabertos.camara.leg.br/)
-
-    Portal de Dados Abertos do Governo Federal.
     """
 )
-
 st.sidebar.markdown("---")
 st.sidebar.markdown("Dashboard Versão 1.0")
-
-if not deputados_sel:
-    st.warning("Selecione deputados na barra lateral para ver a análise individual detalhada.")
-
-df_individual = df_filtrado_partido[df_filtrado_partido["deputado_partido"].isin(deputados_sel)]
-st.stop()
 
 # ==========================================================
 # SEÇÃO 2: ANÁLISE DOS DEPUTADOS SELECIONADOS
 # ==========================================================
-st.header("📊 Análise dos Deputados Selecionados")
 
-# Mapa de cores fixo
-todas_descricoes = sorted(df_base["descricao"].unique())
-cores = px.colors.qualitative.Alphabet
-mapa_cores = {desc: cores[i % len(cores)] for i, desc in enumerate(todas_descricoes)}
-mapa_cores["Outros"] = "#808080"
+# Verificamos se há deputados selecionados antes de mostrar a seção
+if not deputados_sel:
+    st.info("💡 **Dica:** Selecione até 5 deputados na barra lateral para ver a análise individual detalhada.")
+else:
+    st.header("📊 Análise dos Deputados Selecionados")
+    
+    df_individual = df_filtrado_partido[df_filtrado_partido["deputado_partido"].isin(deputados_sel)]
 
-# Comparativo de Barras
-comp_ind = df_individual.groupby("deputado_partido")["valor"].sum().reset_index()
-st.plotly_chart(px.bar(comp_ind, x="deputado_partido", y="valor", title="Comparativo Direto"), use_container_width=True)
+    # Mapa de cores fixo
+    todas_descricoes = sorted(df_base["descricao"].unique())
+    cores = px.colors.qualitative.Alphabet
+    mapa_cores = {desc: cores[i % len(cores)] for i, desc in enumerate(todas_descricoes)}
+    mapa_cores["Outros"] = "#808080"
 
-# Pizza charts com Expander
-for dep in deputados_sel:
-    with st.expander(f"🔍 Detalhes: {dep}"):
-        df_dep = df_individual[df_individual["deputado_partido"] == dep]
-        gasto_tipo = df_dep.groupby("descricao")["valor"].sum().reset_index()
-        
-        # Agrupar 'Outros' (< 2%)
-        total_dep = gasto_tipo["valor"].sum()
-        maiores = gasto_tipo[gasto_tipo["valor"]/total_dep >= 0.02].copy()
-        outros_val = gasto_tipo[gasto_tipo["valor"]/total_dep < 0.02]["valor"].sum()
-        
-        if outros_val > 0:
-            maiores = pd.concat([maiores, pd.DataFrame([{"descricao": "Outros", "valor": outros_val}])], ignore_index=True)
-        
-        fig_pie = px.pie(maiores, names="descricao", values="valor", title=f"Distribuição: {dep}",
-                         color="descricao", color_discrete_map=mapa_cores)
-        fig_pie.update_layout(legend=dict(orientation="h", y=-0.2))
-        st.plotly_chart(fig_pie, use_container_width=True)
+    # Comparativo de Barras
+    comp_ind = df_individual.groupby("deputado_partido")["valor"].sum().reset_index()
+    st.plotly_chart(px.bar(
+        comp_ind, 
+        x="deputado_partido", 
+        y="valor", 
+        title="Comparativo de Gastos Totais no Período",
+        labels={"deputado_partido": "Deputado", "valor": "Total Gasto (R$)"}
+    ), use_container_width=True)
 
-# Evolução Mensal
-st.subheader("📈 Evolução Mensal")
-mensal = df_individual.groupby([df_individual["data"].dt.to_period("M").astype(str), "deputado_partido"])["valor"].sum().reset_index()
-mensal.columns = ["mes", "deputado", "valor"]
-st.plotly_chart(px.line(mensal, x="mes", y="valor", color="deputado", markers=True), use_container_width=True)
+    # Pizza charts com Expander
+    for dep in deputados_sel:
+        with st.expander(f"🔍 Detalhes: {dep}"):
+            df_dep = df_individual[df_individual["deputado_partido"] == dep]
+            gasto_tipo = df_dep.groupby("descricao")["valor"].sum().reset_index()
+            
+            # Agrupar 'Outros' (< 2%)
+            total_dep = gasto_tipo["valor"].sum()
+            maiores = gasto_tipo[gasto_tipo["valor"]/total_dep >= 0.02].copy()
+            outros_val = gasto_tipo[gasto_tipo["valor"]/total_dep < 0.02]["valor"].sum()
+            
+            if outros_val > 0:
+                novo_item = pd.DataFrame([{"descricao": "Outros", "valor": outros_val}])
+                maiores = pd.concat([maiores, novo_item], ignore_index=True)
+            
+            fig_pie = px.pie(
+                maiores, 
+                names="descricao", 
+                values="valor", 
+                title=f"Distribuição de Gastos: {dep}",
+                color="descricao", 
+                color_discrete_map=mapa_cores
+            )
+            fig_pie.update_layout(legend=dict(orientation="h", y=-0.2))
+            st.plotly_chart(fig_pie, use_container_width=True)
+
+    # Evolução Mensal
+    st.subheader("📈 Evolução Mensal")
+    # Criamos uma cópia para evitar avisos de SettingWithCopy
+    df_evolucao = df_individual.copy()
+    df_evolucao["mes"] = df_evolucao["data"].dt.to_period("M").astype(str)
+    
+    mensal = df_evolucao.groupby(["mes", "deputado_partido"])["valor"].sum().reset_index()
+    
+    fig_line = px.line(
+        mensal, 
+        x="mes", 
+        y="valor", 
+        color="deputado_partido", 
+        markers=True,
+        title="Gasto Mensal ao Longo do Tempo",
+        labels={"mes": "Mês/Ano", "valor": "Gasto (R$)", "deputado_partido": "Deputado"}
+    )
+    st.plotly_chart(fig_line, use_container_width=True)
 
 # Alertas de Anomalias
 # ⚠️ GASTOS MUITO ACIMA DA MÉDIA (CORRIGIDO)
