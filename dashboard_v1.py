@@ -122,11 +122,6 @@ df_filtrado_partido = df_macro[df_macro["partido"].isin(partido_sel)]
 deputados_disp = sorted(df_filtrado_partido["deputado_partido"].unique())
 deputados_sel = st.sidebar.multiselect("Selecione até 5 deputados", deputados_disp, max_selections=5)
 
-if not deputados_sel:
-    st.warning("Selecione deputados na barra lateral para ver a análise individual detalhada.")
-
-df_individual = df_filtrado_partido[df_filtrado_partido["deputado_partido"].isin(deputados_sel)]
-
 # ==========================================================
 # 🔗 FONTE DOS DADOS
 # ==========================================================
@@ -144,6 +139,11 @@ st.sidebar.markdown(
 
 st.sidebar.markdown("---")
 st.sidebar.markdown("Dashboard Versão 1.0")
+
+if not deputados_sel:
+    st.warning("Selecione deputados na barra lateral para ver a análise individual detalhada.")
+
+df_individual = df_filtrado_partido[df_filtrado_partido["deputado_partido"].isin(deputados_sel)]
 st.stop()
 
 # ==========================================================
