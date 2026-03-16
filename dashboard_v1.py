@@ -144,10 +144,39 @@ st.sidebar.markdown("Dashboard Versão 1.0")
 if not deputados_sel:
     st.info("💡 **Dica:** Selecione até 5 deputados na barra lateral para ver a análise individual detalhada.")
 else:
-    st.header("📊 Análise dos Deputados Selecionados")
-    
+    # 1. CRIAR DATAFRAME (Dentro do else para evitar NameError)
     df_individual = df_filtrado_partido[df_filtrado_partido["deputado_partido"].isin(deputados_sel)]
 
+    st.header("📊 Análise dos Deputados Selecionados")
+    
+    # --- ALERTAS DE ANOMALIAS ---
+    st.subheader("⚠️ Alertas: Gastos Fora do Padrão")
+
+    # Média por NOTA FISCAL (cada linha do banco)
+    media_por_nota = df_macro["valor"].mean() 
+    limite_nota = media_por_nota * 10  
+
+    col_a1, col_a2 = st.columns(2)
+    col_a1.metric("Média por Nota (Câmara)", f"R$ {media_por_nota:,.2f}")
+    col_a2.metric("Limite de Alerta (10x)", f"R$ {limite_nota:,.2f}")
+
+    # Filtra apenas as notas dos deputados SELECIONADOS que são anomalias
+    acima_media = df_individual[df_individual["valor"] > limite_nota]
+
+    if not acima_media.empty:
+        st.warning(f"🚨 Detectamos {len(acima_media)} notas com valores atípicos entre os selecionados.")
+        st.dataframe(
+            acima_media[["data", "nome", "valor", "descricao"]].sort_values("valor", ascending=False),
+            use_container_width=True,
+            hide_index=True,
+            column_config={"valor": st.column_config.NumberColumn("Valor", format="R$ %.2f")}
+        )
+    else:
+        st.success("✅ Nenhuma nota individual com valor extremo encontrada para estes deputados.")
+
+    st.divider()
+
+    # --- GRÁFICOS ---
     # Mapa de cores fixo
     todas_descricoes = sorted(df_base["descricao"].unique())
     cores = px.colors.qualitative.Alphabet
@@ -192,7 +221,6 @@ else:
 
     # Evolução Mensal
     st.subheader("📈 Evolução Mensal")
-    # Criamos uma cópia para evitar avisos de SettingWithCopy
     df_evolucao = df_individual.copy()
     df_evolucao["mes"] = df_evolucao["data"].dt.to_period("M").astype(str)
     
@@ -209,36 +237,11 @@ else:
     )
     st.plotly_chart(fig_line, use_container_width=True)
 
-# Alertas de Anomalias
-# ⚠️ GASTOS MUITO ACIMA DA MÉDIA (CORRIGIDO)
-st.subheader("⚠️ Alertas: Gastos Fora do Padrão")
-
-# O segredo está aqui: média por NOTA FISCAL (cada linha do banco), não por deputado
-media_por_nota = df_macro["valor"].mean() 
-limite_nota = media_por_nota * 10  # Exemplo: Notas 10x maiores que a média comum
-
-col_a1, col_a2 = st.columns(2)
-col_a1.metric("Média por Nota (Câmara)", f"R$ {media_por_nota:,.2f}")
-col_a2.metric("Limite de Alerta (10x)", f"R$ {limite_nota:,.2f}")
-
-# Filtra apenas as notas dos deputados SELECIONADOS que estouram esse limite
-acima_media = df_individual[df_individual["valor"] > limite_nota]
-
-if not acima_media.empty:
-    st.warning(f"🚨 Detectamos {len(acima_media)} notas com valores atípicos entre os selecionados.")
+    # --- LISTA COMPLETA ---
+    st.subheader("📄 Lista Completa de Gastos (Selecionados)")
     st.dataframe(
-        acima_media[["data", "nome", "valor", "descricao"]].sort_values("valor", ascending=False),
+        df_individual[["data", "nome", "partido", "valor", "descricao"]].sort_values("data", ascending=False),
         use_container_width=True,
         hide_index=True,
         column_config={"valor": st.column_config.NumberColumn("Valor", format="R$ %.2f")}
     )
-else:
-    st.success("✅ Nenhuma nota individual com valor extremo encontrada para estes deputados.")
-
-# Lista Final
-st.subheader("📄 Lista Completa de Gastos (Selecionados)")
-st.dataframe(
-    df_individual[["data", "nome", "partido", "valor", "descricao"]].sort_values("data", ascending=False),
-    use_container_width=True,
-    column_config={"valor": st.column_config.NumberColumn("Valor", format="R$ %.2f")}
-)
