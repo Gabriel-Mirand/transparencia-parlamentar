@@ -129,6 +129,24 @@ if not deputados_sel:
 df_individual = df_filtrado_partido[df_filtrado_partido["deputado_partido"].isin(deputados_sel)]
 
 # ==========================================================
+# 🔗 FONTE DOS DADOS
+# ==========================================================
+st.sidebar.markdown("---")
+st.sidebar.markdown("### 🔎 Fonte dos Dados")
+
+st.sidebar.markdown(
+    """
+    Dados coletados da API oficial da  
+    [Câmara dos Deputados](https://dadosabertos.camara.leg.br/)
+
+    Portal de Dados Abertos do Governo Federal.
+    """
+)
+
+st.sidebar.markdown("---")
+st.sidebar.markdown("Dashboard Versão 1.0")
+
+# ==========================================================
 # SEÇÃO 2: ANÁLISE DOS DEPUTADOS SELECIONADOS
 # ==========================================================
 st.header("📊 Análise dos Deputados Selecionados")
