@@ -124,7 +124,6 @@ deputados_sel = st.sidebar.multiselect("Selecione até 5 deputados", deputados_d
 
 if not deputados_sel:
     st.warning("Selecione deputados na barra lateral para ver a análise individual detalhada.")
-    st.stop()
 
 df_individual = df_filtrado_partido[df_filtrado_partido["deputado_partido"].isin(deputados_sel)]
 
@@ -145,6 +144,7 @@ st.sidebar.markdown(
 
 st.sidebar.markdown("---")
 st.sidebar.markdown("Dashboard Versão 1.0")
+st.stop()
 
 # ==========================================================
 # SEÇÃO 2: ANÁLISE DOS DEPUTADOS SELECIONADOS
