@@ -144,6 +144,7 @@ st.sidebar.markdown(
 
 st.sidebar.markdown("---")
 st.sidebar.markdown("Dashboard Versão 1.0")
+st.stop()
 
 # ==========================================================
 # SEÇÃO 2: ANÁLISE DOS DEPUTADOS SELECIONADOS
